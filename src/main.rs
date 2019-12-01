@@ -1,6 +1,20 @@
-use pixel_canvas::{Canvas, Color, input::MouseState};
+use pixel_canvas::{Canvas, Color, Image, input::MouseState};
+mod grid;
 
 fn main() {
+    let mut image = Image::new(10, 10);
+
+    let width = image.width();
+    for (y, row) in image.chunks_mut(width).enumerate() {
+        for (x, pixel) in row.iter_mut().enumerate() {
+            *pixel = Color {
+                r: 255,
+                g: 0,
+                b: 0,
+            }
+        }
+    }
+
     // Configure the window that you want to draw in. You can add an event
     // handler to build interactive art. Input handlers for common use are
     // provided.
