@@ -1,17 +1,13 @@
-use pixel_canvas::{Canvas, Color, Image, input::MouseState};
+use pixel_canvas::{Canvas, Color, input::MouseState};
 mod grid;
 
 fn main() {
-    let mut image = Image::new(10, 10);
+    let mut grid = grid::Grid::new(10, 10, &false);
 
-    let width = image.width();
-    for (y, row) in image.chunks_mut(width).enumerate() {
-        for (x, pixel) in row.iter_mut().enumerate() {
-            *pixel = Color {
-                r: 255,
-                g: 0,
-                b: 0,
-            }
+    let width = grid.width();
+    for (y, row) in grid.chunks_mut(width).enumerate() {
+        for (x, cell) in row.iter_mut().enumerate() {
+            *cell = true;
         }
     }
 
