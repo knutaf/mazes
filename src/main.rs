@@ -42,6 +42,22 @@ fn draw_vertical_line(
     }
 }
 
+fn draw_horizontal_line(
+    image: &mut Image,
+    scale: usize,
+    x1: usize,
+    x2: usize,
+    y: usize,
+    ) {
+    for draw_x in (x1 * scale .. x2 * scale) {
+        image[pixel_canvas::XY(draw_x, y * scale)] = Color {
+            r: 0,
+            g: 0,
+            b: 255,
+        };
+    }
+}
+
 fn main() {
     let scale = 50;
     let mut grid_state = GridState::new(10, 10, scale);
@@ -74,7 +90,13 @@ fn main() {
             for (x, cell) in row.iter().enumerate() {
                 if y < grid.height() - 1 {
                     if *cell && grid[XY(x, y+1)] {
-                        draw_vertical_line(image, grid_state.scale, x, y, y+1)
+                        draw_vertical_line(image, grid_state.scale, x, y, y+1);
+                    }
+                }
+
+                if x < grid.width() - 1 {
+                    if *cell && grid[XY(x+1, y)] {
+                        draw_horizontal_line(image, grid_state.scale, x, x+1, y);
                     }
                 }
             }
