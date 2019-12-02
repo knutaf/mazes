@@ -5,9 +5,11 @@ fn main() {
     let mut grid = grid::Grid::new(10, 10, &false);
 
     let width = grid.width();
+    let height = grid.height();
     for (y, row) in grid.chunks_mut(width).enumerate() {
         for (x, cell) in row.iter_mut().enumerate() {
-            *cell = true;
+            *cell = (y == 0 || y == height - 1 ||
+                     x == 0 || x == height - 1)
         }
     }
 
