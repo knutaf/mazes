@@ -1,8 +1,51 @@
-use pixel_canvas::{Canvas, Color, input::MouseState};
+use pixel_canvas::{Canvas, canvas::CanvasInfo, Color, image::Image, input::Event, input::MouseState};
 mod grid;
+use grid::{Grid, XY};
+
+struct GridState {
+    mouse_state: MouseState,
+    grid: Grid<bool>,
+    scale: usize,
+}
+
+impl GridState {
+    fn new(width: usize, height: usize, scale: usize) -> GridState {
+        GridState {
+            grid: Grid::new(width, height, &false),
+            mouse_state: MouseState::new(),
+            scale: scale,
+        }
+    }
+
+    fn handle_input(
+        info: &CanvasInfo,
+        state: &mut GridState,
+        event: &Event<()>
+        ) -> bool {
+        MouseState::handle_input(info, &mut state.mouse_state, event)
+    }
+}
+
+fn draw_vertical_line(
+    image: &mut Image,
+    scale: usize,
+    x: usize,
+    y1: usize,
+    y2: usize,
+    ) {
+    for draw_y in (y1 * scale .. y2 * scale) {
+        image[pixel_canvas::XY(x * scale, draw_y)] = Color {
+            r: 255,
+            g: 0,
+            b: 0,
+        };
+    }
+}
 
 fn main() {
-    let mut grid = grid::Grid::new(10, 10, &false);
+    let scale = 50;
+    let mut grid_state = GridState::new(10, 10, scale);
+    let grid = &mut grid_state.grid;
 
     let width = grid.width();
     let height = grid.height();
@@ -16,23 +59,23 @@ fn main() {
     // Configure the window that you want to draw in. You can add an event
     // handler to build interactive art. Input handlers for common use are
     // provided.
-    let canvas = Canvas::new(512, 512)
+    let canvas = Canvas::new(grid.width() * scale, grid.height() * scale)
         .title("Tile")
-        .state(MouseState::new())
-        .input(MouseState::handle_input)
+        .state(grid_state)
+        .input(GridState::handle_input)
         ;
 
     // The canvas will render for you at up to 60fps.
-    canvas.render(|mouse, image| {
-        // Modify the `image` based on your state.
-        let width = image.width();
-        for (y, row) in image.chunks_mut(width).enumerate() {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                let is_black = x % 2 == 0 && y % 2 == 0;
-                *pixel = Color {
-                    r: if is_black { 0 } else { 255 },
-                    g: if is_black { 0 } else { 255 },
-                    b: if is_black { 0 } else { 255 },
+    canvas.render(|grid_state, image| {
+        image.fill(Color { r: 255, g: 255, b: 255 });
+
+        let grid = &grid_state.grid;
+        for (y, row) in grid.chunks(grid.width()).enumerate() {
+            for (x, cell) in row.iter().enumerate() {
+                if y < grid.height() - 1 {
+                    if *cell && grid[XY(x, y+1)] {
+                        draw_vertical_line(image, grid_state.scale, x, y, y+1)
+                    }
                 }
             }
         }
