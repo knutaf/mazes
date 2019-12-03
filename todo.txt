@@ -1,4 +1,4 @@
-- draw grid with thin lines
+DONE - draw grid with thin lines
 - draw grid with thick lines
 - choose start and end point on opposite walls
 - generate random points in grid with monotonic increasing path through maze from one side to the other

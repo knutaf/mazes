@@ -32,16 +32,30 @@ fn draw_horizontal_line(
     }
 }
 
+#[derive(Clone)]
+enum GridCellType {
+    Empty,
+    Start,
+    End,
+    Path,
+}
+
+#[derive(Clone)]
+struct GridCell {
+    kind: GridCellType,
+    is_edge_segment: bool,
+}
+
 struct GridState {
     mouse_state: MouseState,
-    grid: Grid<bool>,
+    grid: Grid<GridCell>,
     scale: usize,
 }
 
 impl GridState {
     fn new(width: usize, height: usize, scale: usize) -> GridState {
         GridState {
-            grid: Grid::new(width, height, &false),
+            grid: Grid::new(width, height, &GridCell { kind: GridCellType::Empty, is_edge_segment: false} ),
             mouse_state: MouseState::new(),
             scale: scale,
         }
@@ -88,13 +102,13 @@ impl GridState {
         for (y, row) in grid.chunks(grid.width()).enumerate() {
             for (x, cell) in row.iter().enumerate() {
                 if y < grid.height() - 1 {
-                    if *cell && grid[XY(x, y+1)] {
+                    if cell.is_edge_segment && grid[XY(x, y+1)].is_edge_segment {
                         self.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
                 if x < grid.width() - 1 {
-                    if *cell && grid[XY(x+1, y)] {
+                    if cell.is_edge_segment && grid[XY(x+1, y)].is_edge_segment {
                         self.draw_horizontal_edge(image, x, x+1, y);
                     }
                 }
@@ -111,8 +125,11 @@ fn main() {
     let height = grid.height();
     for (y, row) in grid.chunks_mut(width).enumerate() {
         for (x, cell) in row.iter_mut().enumerate() {
-            *cell = (y == 0 || y == height - 1 ||
-                     x == 0 || x == height - 1)
+            *cell = GridCell {
+                    kind: GridCellType::Empty,
+                    is_edge_segment: (y == 0 || y == height - 1 ||
+                                      x == 0 || x == height - 1),
+                    }
         }
     }
 
