@@ -26,36 +26,6 @@ const SCALE_IN_PX: usize = 50;
 const CELL_FILL_MARGIN_IN_PX: usize  = 10;
 const EDGE_THICKNESS_IN_PX: usize = 5;
 
-fn draw_vertical_line(
-    image: &mut Image,
-    x: usize,
-    y1: usize,
-    y2: usize,
-    ) {
-    for draw_y in (y1 .. y2) {
-        image[pixel_canvas::XY(x, draw_y)] = Color {
-            r: 255,
-            g: 0,
-            b: 0,
-        };
-    }
-}
-
-fn draw_horizontal_line(
-    image: &mut Image,
-    x1: usize,
-    x2: usize,
-    y: usize,
-    ) {
-    for draw_x in (x1 .. x2) {
-        image[pixel_canvas::XY(draw_x, y)] = Color {
-            r: 0,
-            g: 0,
-            b: 255,
-        };
-    }
-}
-
 fn draw_box(
     image: &mut Image,
     x1: usize,
@@ -64,8 +34,8 @@ fn draw_box(
     y2: usize,
     color: &Color
     ) {
-    for draw_x in (x1 .. x2) {
-        for draw_y in (y1 .. y2) {
+    for draw_x in x1 .. x2 {
+        for draw_y in y1 .. y2 {
             image[pixel_canvas::XY(draw_x, draw_y)] = *color;
         }
     }
@@ -102,15 +72,12 @@ struct GridState {
 
 impl GridState {
     fn new(width: usize, height: usize, scale: usize) -> GridState {
-        let grid = Self::create_grid(width, height);
-        let mut grid_state = GridState {
-            grid: grid,
+        GridState {
+            grid: Self::create_grid(width, height),
             mouse_state: MouseState::new(),
             scale: scale,
             next_command: None,
-        };
-
-        grid_state
+        }
     }
 
     fn create_grid(width: usize, height: usize) -> CellGrid {
@@ -118,8 +85,8 @@ impl GridState {
 
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let is_border = (y == 0 || y == height - 1 ||
-                                 x == 0 || x == width - 1);
+                let is_border = y == 0 || y == height - 1 ||
+                                x == 0 || x == width - 1;
 
                 let is_inner_cell = x != width - 1 && y != height - 1;
                 *cell = GridCell {
@@ -176,7 +143,7 @@ impl GridState {
         ) -> bool {
         let handled_mouse = MouseState::handle_input(info, &mut state.mouse_state, event);
 
-        let handled_key = if (state.next_command.is_none()) {
+        let handled_key = if state.next_command.is_none() {
             match event {
                 Event::WindowEvent {
                     event: WindowEvent::KeyboardInput {

@@ -1,5 +1,5 @@
 DONE - draw grid with thin lines
-- draw grid with thick lines
+DONE - draw grid with thick lines
 - choose start and end point on opposite walls
 - generate random points in grid with monotonic increasing path through maze from one side to the other
 - generate random points and allow backtracking (though not overlapping)
@@ -8,3 +8,4 @@ DONE - draw grid with thin lines
 - generate random walls for the other cells in the maze
 - implement checker to tell if a cell is valid or not (valid means exactly one or two exits from the cell)
 - generate walls for other cells until valid
+- tighten up drawing (thick edges are badly aligned, upper-right corner has an empty gap, window border exceeds maze walls

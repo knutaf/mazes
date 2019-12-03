@@ -25,12 +25,12 @@ pub struct XY(pub usize, pub usize);
 
 impl<CellType> Grid<CellType>
     where CellType : Clone {
-    /// The width of the image in cells.
+    /// The width of the grid in cells.
     pub fn width(&self) -> usize {
         self.width
     }
 
-    /// The height of the image in cells.
+    /// The height of the grid in cells.
     pub fn height(&self) -> usize {
         self.height
     }
@@ -41,13 +41,6 @@ impl<CellType> Grid<CellType>
             width,
             height,
             cells: vec![template.clone(); (width * height) as usize],
-        }
-    }
-
-    /// Fill the image with a single value.
-    pub fn fill(&mut self, template: &CellType) {
-        for cell in &mut self.cells {
-            *cell = template.clone();
         }
     }
 }
