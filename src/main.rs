@@ -84,6 +84,8 @@ struct GridCell {
     is_edge_segment: bool,
 }
 
+type CellGrid = Grid<GridCell>;
+
 #[derive(Clone)]
 enum Command {
     Exit,
@@ -92,21 +94,28 @@ enum Command {
 
 struct GridState {
     mouse_state: MouseState,
-    grid: Grid<GridCell>,
+    grid: CellGrid,
     scale: usize,
     next_command: Option<Command>,
 }
 
 impl GridState {
     fn new(width: usize, height: usize, scale: usize) -> GridState {
+        let grid = Self::create_grid(width, height);
         let mut grid_state = GridState {
-            grid: Grid::new(width, height, &GridCell { kind: GridCellKind::Empty, is_edge_segment: false} ),
+            grid: grid,
             mouse_state: MouseState::new(),
             scale: scale,
             next_command: None,
         };
 
-        for (y, row) in grid_state.grid.chunks_mut(width).enumerate() {
+        grid_state
+    }
+
+    fn create_grid(width: usize, height: usize) -> CellGrid {
+        let mut grid = CellGrid::new(width, height, &GridCell { kind: GridCellKind::Empty, is_edge_segment: false});
+
+        for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
                 let is_border = (y == height - 1 ||
                                  x == height - 1);
@@ -121,7 +130,7 @@ impl GridState {
         let mut start_point;
         loop {
             start_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-            if grid_state.is_valid_start_or_end(&start_point) {
+            if Self::is_valid_start_or_end(&grid, &start_point) {
                 break;
             }
         }
@@ -129,15 +138,33 @@ impl GridState {
         let mut end_point;
         loop {
             end_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-            if end_point != start_point && grid_state.is_valid_start_or_end(&end_point) {
+            if end_point != start_point && Self::is_valid_start_or_end(&grid, &end_point) {
                 break;
             }
         }
 
-        grid_state.grid[start_point].kind = GridCellKind::Start;
-        grid_state.grid[end_point].kind = GridCellKind::End;
+        grid[start_point].kind = GridCellKind::Start;
+        grid[end_point].kind = GridCellKind::End;
+        grid
+    }
 
-        grid_state
+    fn is_valid_start_or_end(
+        grid: &CellGrid,
+        XY(x, y): &XY,
+        ) -> bool
+    {
+        *x == 0 || *x == grid.width() - 1 ||
+        *y == 0 || *y == grid.height() - 1
+    }
+
+    fn process_command(&mut self) {
+        match self.next_command {
+            Some(Command::Exit) => std::process::exit(0),
+            Some(Command::Refresh) => self.grid = Self::create_grid(self.grid.width(), self.grid.height()),
+            _ => (),
+        };
+
+        self.next_command = None;
     }
 
     fn handle_input(
@@ -175,15 +202,6 @@ impl GridState {
         };
 
         handled_mouse || handled_key
-    }
-
-    fn is_valid_start_or_end(
-        &self,
-        XY(x, y): &XY,
-        ) -> bool
-    {
-        *x == 0 || *x == self.grid.width() - 1 ||
-        *y == 0 || *y == self.grid.height() - 1
     }
 
     fn draw_vertical_edge(
@@ -229,18 +247,6 @@ impl GridState {
                 _ => &Color { r: 255, g: 255, b: 255 },
             },
             );
-    }
-
-    fn process_command(
-        &mut self
-        ) {
-        match self.next_command {
-            Some(Command::Exit) => std::process::exit(0),
-            Some(Command::Refresh) => (),
-            _ => (),
-        };
-
-        self.next_command = None;
     }
 
     fn draw(
