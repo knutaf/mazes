@@ -52,10 +52,9 @@ enum GridCellKind {
 #[derive(Clone)]
 struct GridCell {
     kind: GridCellKind,
-    is_edge_segment: bool,
+    has_left_edge: bool,
+    has_bottom_edge: bool,
 }
-
-type CellGrid = Grid<GridCell>;
 
 #[derive(Clone)]
 enum Command {
@@ -63,11 +62,22 @@ enum Command {
     Refresh,
 }
 
+type CellGrid = Grid<GridCell>;
 struct GridState {
     mouse_state: MouseState,
     grid: CellGrid,
     scale: usize,
     next_command: Option<Command>,
+}
+
+impl GridCell {
+    fn new() -> GridCell {
+        GridCell {
+            kind: GridCellKind::Empty,
+            has_left_edge: false,
+            has_bottom_edge: false,
+        }
+    }
 }
 
 impl GridState {
@@ -81,17 +91,15 @@ impl GridState {
     }
 
     fn create_grid(width: usize, height: usize) -> CellGrid {
-        let mut grid = CellGrid::new(width, height, &GridCell { kind: GridCellKind::Empty, is_edge_segment: false});
+        let mut grid = CellGrid::new(width, height, &GridCell::new());
 
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let is_border = y == 0 || y == height - 1 ||
-                                x == 0 || x == width - 1;
-
                 let is_inner_cell = x != width - 1 && y != height - 1;
                 *cell = GridCell {
                     kind: if is_inner_cell { GridCellKind::Path } else { GridCellKind::Empty },
-                    is_edge_segment: is_border,
+                    has_bottom_edge: y == 0 || y == height - 1,
+                    has_left_edge: x == 0 || x == width - 1,
                 }
             }
         }
@@ -242,14 +250,14 @@ impl GridState {
             for (x, cell) in row.iter().enumerate() {
                 // Draw left edge
                 if y < grid.height() - 1 {
-                    if cell.is_edge_segment && grid[XY(x, y+1)].is_edge_segment {
+                    if cell.has_left_edge && grid[XY(x, y+1)].has_left_edge {
                         self.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
                 // Draw bottom edge
                 if x < grid.width() - 1 {
-                    if cell.is_edge_segment && grid[XY(x+1, y)].is_edge_segment {
+                    if cell.has_bottom_edge && grid[XY(x+1, y)].has_bottom_edge {
                         self.draw_horizontal_edge(image, x, x+1, y);
                     }
                 }
