@@ -23,7 +23,8 @@ mod grid;
 use grid::{Grid, XY};
 
 const SCALE_IN_PX: usize = 50;
-const CELL_FILL_MARGIN_IN_PX: usize  = 5;
+const CELL_FILL_MARGIN_IN_PX: usize  = 10;
+const EDGE_THICKNESS_IN_PX: usize = 5;
 
 fn draw_vertical_line(
     image: &mut Image,
@@ -117,13 +118,14 @@ impl GridState {
 
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let is_border = (y == height - 1 ||
-                                 x == height - 1);
+                let is_border = (y == 0 || y == height - 1 ||
+                                 x == 0 || x == width - 1);
 
+                let is_inner_cell = x != width - 1 && y != height - 1;
                 *cell = GridCell {
-                        kind: if is_border { GridCellKind::Empty } else { GridCellKind::Path },
-                        is_edge_segment: is_border,
-                        }
+                    kind: if is_inner_cell { GridCellKind::Path } else { GridCellKind::Empty },
+                    is_edge_segment: is_border,
+                }
             }
         }
 
@@ -212,7 +214,13 @@ impl GridState {
         y2: usize
         )
     {
-        draw_vertical_line(image, x * self.scale, y1 * self.scale, y2 * self.scale);
+        draw_box(
+            image,
+            x * self.scale,
+            y1 * self.scale,
+            (x * self.scale) + EDGE_THICKNESS_IN_PX,
+            y2 * self.scale,
+            &Color { r: 0, g: 0, b: 255});
     }
 
     fn draw_horizontal_edge(
@@ -223,7 +231,13 @@ impl GridState {
         y: usize
         )
     {
-        draw_horizontal_line(image, x1 * self.scale, x2 * self.scale, y * self.scale);
+        draw_box(
+            image,
+            x1 * self.scale,
+            y * self.scale,
+            x2 * self.scale,
+            (y * self.scale) + EDGE_THICKNESS_IN_PX,
+            &Color { r: 255, g: 0, b: 0});
     }
 
     fn draw_cell(
