@@ -2,6 +2,9 @@ use pixel_canvas::{Canvas, canvas::CanvasInfo, Color, image::Image, input::Event
 mod grid;
 use grid::{Grid, XY};
 
+const SCALE_IN_PX: usize = 50;
+const CELL_FILL_MARGIN_IN_PX: usize  = 5;
+
 fn draw_vertical_line(
     image: &mut Image,
     x: usize,
@@ -29,6 +32,24 @@ fn draw_horizontal_line(
             g: 0,
             b: 255,
         };
+    }
+}
+
+fn draw_box(
+    image: &mut Image,
+    x1: usize,
+    y1: usize,
+    x2: usize,
+    y2: usize,
+    ) {
+    for draw_x in (x1 .. x2) {
+        for draw_y in (y1 .. y2) {
+            image[pixel_canvas::XY(draw_x, draw_y)] = Color {
+                r: 0,
+                g: 255,
+                b: 0,
+            };
+        }
     }
 }
 
@@ -91,6 +112,21 @@ impl GridState {
         draw_horizontal_line(image, x1 * self.scale, x2 * self.scale, y * self.scale);
     }
 
+    fn draw_cell(
+        &self,
+        image: &mut Image,
+        x: usize,
+        y: usize,
+        ) {
+        draw_box(
+            image,
+            (x * self.scale) + CELL_FILL_MARGIN_IN_PX,
+            (y * self.scale) + CELL_FILL_MARGIN_IN_PX,
+            ((x+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
+            ((y+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
+            );
+    }
+
     fn draw(
         &self,
         image: &mut Image,
@@ -101,16 +137,23 @@ impl GridState {
         let grid = &self.grid;
         for (y, row) in grid.chunks(grid.width()).enumerate() {
             for (x, cell) in row.iter().enumerate() {
+                // Draw left edge
                 if y < grid.height() - 1 {
                     if cell.is_edge_segment && grid[XY(x, y+1)].is_edge_segment {
                         self.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
+                // Draw bottom edge
                 if x < grid.width() - 1 {
                     if cell.is_edge_segment && grid[XY(x+1, y)].is_edge_segment {
                         self.draw_horizontal_edge(image, x, x+1, y);
                     }
+                }
+
+                match cell.kind {
+                    GridCellType::Start | GridCellType::End | GridCellType::Path => self.draw_cell(image, x, y),
+                    _ => (),
                 }
             }
         }
@@ -118,17 +161,19 @@ impl GridState {
 }
 
 fn main() {
-    let mut grid_state = GridState::new(10, 10, 50);
+    let mut grid_state = GridState::new(10, 10, SCALE_IN_PX);
     let grid = &mut grid_state.grid;
 
     let width = grid.width();
     let height = grid.height();
     for (y, row) in grid.chunks_mut(width).enumerate() {
         for (x, cell) in row.iter_mut().enumerate() {
+            let is_border = (y == 0 || y == height - 1 ||
+                             x == 0 || x == height - 1);
+
             *cell = GridCell {
-                    kind: GridCellType::Empty,
-                    is_edge_segment: (y == 0 || y == height - 1 ||
-                                      x == 0 || x == height - 1),
+                    kind: if is_border { GridCellType::Empty } else { GridCellType::Path },
+                    is_edge_segment: is_border,
                     }
         }
     }
