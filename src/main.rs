@@ -76,11 +76,35 @@ impl GridState {
     {
         draw_horizontal_line(image, x1 * self.scale, x2 * self.scale, y * self.scale);
     }
+
+    fn draw(
+        &self,
+        image: &mut Image,
+        )
+    {
+        image.fill(Color { r: 255, g: 255, b: 255 });
+
+        let grid = &self.grid;
+        for (y, row) in grid.chunks(grid.width()).enumerate() {
+            for (x, cell) in row.iter().enumerate() {
+                if y < grid.height() - 1 {
+                    if *cell && grid[XY(x, y+1)] {
+                        self.draw_vertical_edge(image, x, y, y+1);
+                    }
+                }
+
+                if x < grid.width() - 1 {
+                    if *cell && grid[XY(x+1, y)] {
+                        self.draw_horizontal_edge(image, x, x+1, y);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn main() {
-    let scale = 50;
-    let mut grid_state = GridState::new(10, 10, scale);
+    let mut grid_state = GridState::new(10, 10, 50);
     let grid = &mut grid_state.grid;
 
     let width = grid.width();
@@ -95,7 +119,7 @@ fn main() {
     // Configure the window that you want to draw in. You can add an event
     // handler to build interactive art. Input handlers for common use are
     // provided.
-    let canvas = Canvas::new(grid.width() * scale, grid.height() * scale)
+    let canvas = Canvas::new(grid.width() * grid_state.scale, grid.height() * grid_state.scale)
         .title("Tile")
         .state(grid_state)
         .input(GridState::handle_input)
@@ -103,23 +127,6 @@ fn main() {
 
     // The canvas will render for you at up to 60fps.
     canvas.render(|grid_state, image| {
-        image.fill(Color { r: 255, g: 255, b: 255 });
-
-        let grid = &grid_state.grid;
-        for (y, row) in grid.chunks(grid.width()).enumerate() {
-            for (x, cell) in row.iter().enumerate() {
-                if y < grid.height() - 1 {
-                    if *cell && grid[XY(x, y+1)] {
-                        grid_state.draw_vertical_edge(image, x, y, y+1);
-                    }
-                }
-
-                if x < grid.width() - 1 {
-                    if *cell && grid[XY(x+1, y)] {
-                        grid_state.draw_horizontal_edge(image, x, x+1, y);
-                    }
-                }
-            }
-        }
+        grid_state.draw(image);
     });
 }
