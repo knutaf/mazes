@@ -1,4 +1,9 @@
+extern crate pixel_canvas;
+extern crate rand;
+
 use pixel_canvas::{Canvas, canvas::CanvasInfo, Color, image::Image, input::Event, input::MouseState};
+use rand::Rng;
+
 mod grid;
 use grid::{Grid, XY};
 
@@ -51,7 +56,7 @@ fn draw_box(
 }
 
 #[derive(Clone)]
-enum GridCellType {
+enum GridCellKind {
     Empty,
     Start,
     End,
@@ -60,7 +65,7 @@ enum GridCellType {
 
 #[derive(Clone)]
 struct GridCell {
-    kind: GridCellType,
+    kind: GridCellKind,
     is_edge_segment: bool,
 }
 
@@ -72,11 +77,44 @@ struct GridState {
 
 impl GridState {
     fn new(width: usize, height: usize, scale: usize) -> GridState {
-        GridState {
-            grid: Grid::new(width, height, &GridCell { kind: GridCellType::Empty, is_edge_segment: false} ),
+        let mut grid_state = GridState {
+            grid: Grid::new(width, height, &GridCell { kind: GridCellKind::Empty, is_edge_segment: false} ),
             mouse_state: MouseState::new(),
             scale: scale,
+        };
+
+        for (y, row) in grid_state.grid.chunks_mut(width).enumerate() {
+            for (x, cell) in row.iter_mut().enumerate() {
+                let is_border = (y == height - 1 ||
+                                 x == height - 1);
+
+                *cell = GridCell {
+                        kind: if is_border { GridCellKind::Empty } else { GridCellKind::Path },
+                        is_edge_segment: is_border,
+                        }
+            }
         }
+
+        let mut start_point;
+        loop {
+            start_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
+            if grid_state.is_valid_start_or_end(&start_point) {
+                break;
+            }
+        }
+
+        let mut end_point;
+        loop {
+            end_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
+            if end_point != start_point && grid_state.is_valid_start_or_end(&end_point) {
+                break;
+            }
+        }
+
+        grid_state.grid[start_point].kind = GridCellKind::Start;
+        grid_state.grid[end_point].kind = GridCellKind::End;
+
+        grid_state
     }
 
     fn handle_input(
@@ -85,6 +123,15 @@ impl GridState {
         event: &Event<()>
         ) -> bool {
         MouseState::handle_input(info, &mut state.mouse_state, event)
+    }
+
+    fn is_valid_start_or_end(
+        &self,
+        XY(x, y): &XY,
+        ) -> bool
+    {
+        *x == 0 || *x == self.grid.width() - 1 ||
+        *y == 0 || *y == self.grid.height() - 1
     }
 
     fn draw_vertical_edge(
@@ -124,9 +171,9 @@ impl GridState {
             ((x+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
             ((y+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
             match cell.kind {
-                GridCellType::Start => &Color { r: 50, g: 255, b: 50},
-                GridCellType::End => &Color { r: 255, g: 50, b: 50 },
-                GridCellType::Path => &Color { r: 50, g: 50, b: 255 },
+                GridCellKind::Start => &Color { r: 50, g: 255, b: 50},
+                GridCellKind::End => &Color { r: 255, g: 50, b: 50 },
+                GridCellKind::Path => &Color { r: 50, g: 50, b: 255 },
                 _ => &Color { r: 255, g: 255, b: 255 },
             },
             );
@@ -165,20 +212,6 @@ impl GridState {
 fn main() {
     let mut grid_state = GridState::new(10, 10, SCALE_IN_PX);
     let grid = &mut grid_state.grid;
-
-    let width = grid.width();
-    let height = grid.height();
-    for (y, row) in grid.chunks_mut(width).enumerate() {
-        for (x, cell) in row.iter_mut().enumerate() {
-            let is_border = (y == 0 || y == height - 1 ||
-                             x == 0 || x == height - 1);
-
-            *cell = GridCell {
-                    kind: if is_border { GridCellType::Empty } else { GridCellType::Path },
-                    is_edge_segment: is_border,
-                    }
-        }
-    }
 
     // Configure the window that you want to draw in. You can add an event
     // handler to build interactive art. Input handlers for common use are
