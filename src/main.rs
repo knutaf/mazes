@@ -1,7 +1,22 @@
 extern crate pixel_canvas;
 extern crate rand;
 
-use pixel_canvas::{Canvas, canvas::CanvasInfo, Color, image::Image, input::Event, input::MouseState};
+use pixel_canvas::{
+    Canvas,
+    canvas::CanvasInfo,
+    Color,
+    image::Image,
+    input::{
+        Event,
+        MouseState,
+        WindowEvent,
+        glutin::event::{
+            KeyboardInput,
+            ElementState,
+            VirtualKeyCode,
+        },
+    },
+    };
 use rand::Rng;
 
 mod grid;
@@ -69,10 +84,17 @@ struct GridCell {
     is_edge_segment: bool,
 }
 
+#[derive(Clone)]
+enum Command {
+    Exit,
+    Refresh,
+}
+
 struct GridState {
     mouse_state: MouseState,
     grid: Grid<GridCell>,
     scale: usize,
+    next_command: Option<Command>,
 }
 
 impl GridState {
@@ -81,6 +103,7 @@ impl GridState {
             grid: Grid::new(width, height, &GridCell { kind: GridCellKind::Empty, is_edge_segment: false} ),
             mouse_state: MouseState::new(),
             scale: scale,
+            next_command: None,
         };
 
         for (y, row) in grid_state.grid.chunks_mut(width).enumerate() {
@@ -122,7 +145,36 @@ impl GridState {
         state: &mut GridState,
         event: &Event<()>
         ) -> bool {
-        MouseState::handle_input(info, &mut state.mouse_state, event)
+        let handled_mouse = MouseState::handle_input(info, &mut state.mouse_state, event);
+
+        let handled_key = if (state.next_command.is_none()) {
+            match event {
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput {
+                        input: KeyboardInput {
+                            state: ElementState::Released,
+                            virtual_keycode: Some(vk),
+                            ..
+                        },
+                        ..
+                    },
+                    ..
+                } => {
+                    state.next_command = match vk {
+                        VirtualKeyCode::Escape => Some(Command::Exit),
+                        VirtualKeyCode::F5 => Some(Command::Refresh),
+                        _ => None
+                    };
+
+                    state.next_command.is_some()
+                }
+                _ => false,
+            }
+        } else {
+            false
+        };
+
+        handled_mouse || handled_key
     }
 
     fn is_valid_start_or_end(
@@ -179,6 +231,18 @@ impl GridState {
             );
     }
 
+    fn process_command(
+        &mut self
+        ) {
+        match self.next_command {
+            Some(Command::Exit) => std::process::exit(0),
+            Some(Command::Refresh) => (),
+            _ => (),
+        };
+
+        self.next_command = None;
+    }
+
     fn draw(
         &self,
         image: &mut Image,
@@ -217,13 +281,14 @@ fn main() {
     // handler to build interactive art. Input handlers for common use are
     // provided.
     let canvas = Canvas::new(grid.width() * grid_state.scale, grid.height() * grid_state.scale)
-        .title("Tile")
+        .title("Mazes")
         .state(grid_state)
         .input(GridState::handle_input)
         ;
 
     // The canvas will render for you at up to 60fps.
     canvas.render(|grid_state, image| {
+        grid_state.process_command();
         grid_state.draw(image);
     });
 }
