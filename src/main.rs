@@ -41,14 +41,11 @@ fn draw_box(
     y1: usize,
     x2: usize,
     y2: usize,
+    color: &Color
     ) {
     for draw_x in (x1 .. x2) {
         for draw_y in (y1 .. y2) {
-            image[pixel_canvas::XY(draw_x, draw_y)] = Color {
-                r: 0,
-                g: 255,
-                b: 0,
-            };
+            image[pixel_canvas::XY(draw_x, draw_y)] = *color;
         }
     }
 }
@@ -118,12 +115,20 @@ impl GridState {
         x: usize,
         y: usize,
         ) {
+        let cell = &self.grid[XY(x, y)];
+
         draw_box(
             image,
             (x * self.scale) + CELL_FILL_MARGIN_IN_PX,
             (y * self.scale) + CELL_FILL_MARGIN_IN_PX,
             ((x+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
             ((y+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
+            match cell.kind {
+                GridCellType::Start => &Color { r: 50, g: 255, b: 50},
+                GridCellType::End => &Color { r: 255, g: 50, b: 50 },
+                GridCellType::Path => &Color { r: 50, g: 50, b: 255 },
+                _ => &Color { r: 255, g: 255, b: 255 },
+            },
             );
     }
 
@@ -151,10 +156,7 @@ impl GridState {
                     }
                 }
 
-                match cell.kind {
-                    GridCellType::Start | GridCellType::End | GridCellType::Path => self.draw_cell(image, x, y),
-                    _ => (),
-                }
+                self.draw_cell(image, x, y);
             }
         }
     }
