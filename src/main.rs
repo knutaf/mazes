@@ -2,6 +2,36 @@ use pixel_canvas::{Canvas, canvas::CanvasInfo, Color, image::Image, input::Event
 mod grid;
 use grid::{Grid, XY};
 
+fn draw_vertical_line(
+    image: &mut Image,
+    x: usize,
+    y1: usize,
+    y2: usize,
+    ) {
+    for draw_y in (y1 .. y2) {
+        image[pixel_canvas::XY(x, draw_y)] = Color {
+            r: 255,
+            g: 0,
+            b: 0,
+        };
+    }
+}
+
+fn draw_horizontal_line(
+    image: &mut Image,
+    x1: usize,
+    x2: usize,
+    y: usize,
+    ) {
+    for draw_x in (x1 .. x2) {
+        image[pixel_canvas::XY(draw_x, y)] = Color {
+            r: 0,
+            g: 0,
+            b: 255,
+        };
+    }
+}
+
 struct GridState {
     mouse_state: MouseState,
     grid: Grid<bool>,
@@ -24,37 +54,27 @@ impl GridState {
         ) -> bool {
         MouseState::handle_input(info, &mut state.mouse_state, event)
     }
-}
 
-fn draw_vertical_line(
-    image: &mut Image,
-    scale: usize,
-    x: usize,
-    y1: usize,
-    y2: usize,
-    ) {
-    for draw_y in (y1 * scale .. y2 * scale) {
-        image[pixel_canvas::XY(x * scale, draw_y)] = Color {
-            r: 255,
-            g: 0,
-            b: 0,
-        };
+    fn draw_vertical_edge(
+        &self,
+        image: &mut Image,
+        x: usize,
+        y1: usize,
+        y2: usize
+        )
+    {
+        draw_vertical_line(image, x * self.scale, y1 * self.scale, y2 * self.scale);
     }
-}
 
-fn draw_horizontal_line(
-    image: &mut Image,
-    scale: usize,
-    x1: usize,
-    x2: usize,
-    y: usize,
-    ) {
-    for draw_x in (x1 * scale .. x2 * scale) {
-        image[pixel_canvas::XY(draw_x, y * scale)] = Color {
-            r: 0,
-            g: 0,
-            b: 255,
-        };
+    fn draw_horizontal_edge(
+        &self,
+        image: &mut Image,
+        x1: usize,
+        x2: usize,
+        y: usize
+        )
+    {
+        draw_horizontal_line(image, x1 * self.scale, x2 * self.scale, y * self.scale);
     }
 }
 
@@ -90,13 +110,13 @@ fn main() {
             for (x, cell) in row.iter().enumerate() {
                 if y < grid.height() - 1 {
                     if *cell && grid[XY(x, y+1)] {
-                        draw_vertical_line(image, grid_state.scale, x, y, y+1);
+                        grid_state.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
                 if x < grid.width() - 1 {
                     if *cell && grid[XY(x+1, y)] {
-                        draw_horizontal_line(image, grid_state.scale, x, x+1, y);
+                        grid_state.draw_horizontal_edge(image, x, x+1, y);
                     }
                 }
             }
