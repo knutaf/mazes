@@ -66,7 +66,6 @@ type CellGrid = Grid<GridCell>;
 struct GridState {
     mouse_state: MouseState,
     grid: CellGrid,
-    scale: usize,
     next_command: Option<Command>,
 }
 
@@ -81,11 +80,10 @@ impl GridCell {
 }
 
 impl GridState {
-    fn new(width: usize, height: usize, scale: usize) -> GridState {
+    fn new(width: usize, height: usize) -> GridState {
         GridState {
             grid: Self::create_grid(width, height),
             mouse_state: MouseState::new(),
-            scale: scale,
             next_command: None,
         }
     }
@@ -232,10 +230,10 @@ impl GridState {
     {
         draw_box(
             image,
-            x * self.scale,
-            y1 * self.scale,
-            (x * self.scale) + EDGE_THICKNESS_IN_PX,
-            y2 * self.scale,
+            x * SCALE_IN_PX,
+            y1 * SCALE_IN_PX,
+            (x * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
+            y2 * SCALE_IN_PX,
             &Color { r: 0, g: 0, b: 255});
     }
 
@@ -249,10 +247,10 @@ impl GridState {
     {
         draw_box(
             image,
-            x1 * self.scale,
-            y * self.scale,
-            x2 * self.scale,
-            (y * self.scale) + EDGE_THICKNESS_IN_PX,
+            x1 * SCALE_IN_PX,
+            y * SCALE_IN_PX,
+            x2 * SCALE_IN_PX,
+            (y * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
             &Color { r: 255, g: 0, b: 0});
     }
 
@@ -266,10 +264,10 @@ impl GridState {
 
         draw_box(
             image,
-            (x * self.scale) + CELL_FILL_MARGIN_IN_PX,
-            (y * self.scale) + CELL_FILL_MARGIN_IN_PX,
-            ((x+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
-            ((y+1) * self.scale) - CELL_FILL_MARGIN_IN_PX,
+            (x * SCALE_IN_PX) + CELL_FILL_MARGIN_IN_PX,
+            (y * SCALE_IN_PX) + CELL_FILL_MARGIN_IN_PX,
+            ((x+1) * SCALE_IN_PX) - CELL_FILL_MARGIN_IN_PX,
+            ((y+1) * SCALE_IN_PX) - CELL_FILL_MARGIN_IN_PX,
             match cell.kind {
                 GridCellKind::Start => &Color { r: 50, g: 255, b: 50},
                 GridCellKind::End => &Color { r: 255, g: 50, b: 50 },
@@ -310,13 +308,13 @@ impl GridState {
 }
 
 fn main() {
-    let mut grid_state = GridState::new(10, 10, SCALE_IN_PX);
+    let mut grid_state = GridState::new(10, 10);
     let grid = &mut grid_state.grid;
 
     // Configure the window that you want to draw in. You can add an event
     // handler to build interactive art. Input handlers for common use are
     // provided.
-    let canvas = Canvas::new(grid.width() * grid_state.scale, grid.height() * grid_state.scale)
+    let canvas = Canvas::new(grid.width() * SCALE_IN_PX, grid.height() * SCALE_IN_PX)
         .title("Mazes")
         .state(grid_state)
         .input(GridState::handle_input)
