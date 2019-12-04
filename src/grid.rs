@@ -20,7 +20,7 @@ pub struct RC(pub usize, pub usize);
 
 /// An x/y pair for indexing into the grid.
 /// Distinct from a row/column pair.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct XY(pub usize, pub usize);
 
 impl<CellType> Grid<CellType>

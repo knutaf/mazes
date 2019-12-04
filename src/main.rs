@@ -98,8 +98,8 @@ impl GridState {
                 let is_inner_cell = x != width - 1 && y != height - 1;
                 *cell = GridCell {
                     kind: if is_inner_cell { GridCellKind::Path } else { GridCellKind::Empty },
-                    has_bottom_edge: y == 0 || y == height - 1,
-                    has_left_edge: x == 0 || x == width - 1,
+                    has_bottom_edge: (x != width - 1) && (y == 0 || y == height - 1),
+                    has_left_edge: (y != height - 1) && (x == 0 || x == width - 1),
                 }
             }
         }
@@ -120,9 +120,49 @@ impl GridState {
             }
         }
 
-        grid[start_point].kind = GridCellKind::Start;
-        grid[end_point].kind = GridCellKind::End;
+        grid[start_point.clone()].kind = GridCellKind::Start;
+        grid[end_point.clone()].kind = GridCellKind::End;
+
+        Self::erase_start_or_end_edge(&mut grid, &start_point);
+        Self::erase_start_or_end_edge(&mut grid, &end_point);
+
         grid
+    }
+
+    fn erase_start_or_end_edge(grid: &mut CellGrid, XY(x, y): &XY) {
+        let x = *x;
+        let y = *y;
+
+        let has_vertical_edge = x == 0 || x == grid.width() - 2;
+        let has_horizontal_edge = y == 0 || y == grid.height() - 2;
+
+        // Decide whether to erase a vertical edge or horizontal edge. The chosen edge can only be
+        // erased if the cell has such an edge available to erase, so keep looping until the intent
+        // and available edge lines up.
+        let mut erase_vertical_edge = rand::thread_rng().gen_bool(0.5);
+        while erase_vertical_edge != has_vertical_edge && !erase_vertical_edge != has_horizontal_edge {
+            erase_vertical_edge = rand::thread_rng().gen_bool(0.5);
+        }
+
+        // Erasing a vertical edge on the right border means going to the next cell over (just
+        // outside the border) and erasing the left edge.
+        if erase_vertical_edge {
+            if x == grid.width() - 2 {
+                grid[XY(x + 1, y)].has_left_edge = false;
+            } else {
+                grid[XY(x, y)].has_left_edge = false;
+            }
+        }
+
+        // Erasing a horizontal edge on the top edge means going one cell up (just outside the
+        // border) and erasing the bottom edge.
+        else {
+            if y == grid.height() - 2 {
+                grid[XY(x, y + 1)].has_bottom_edge = false;
+            } else {
+                grid[XY(x, y)].has_bottom_edge = false;
+            }
+        }
     }
 
     fn is_valid_start_or_end(
@@ -130,8 +170,9 @@ impl GridState {
         XY(x, y): &XY,
         ) -> bool
     {
-        *x == 0 || *x == grid.width() - 1 ||
-        *y == 0 || *y == grid.height() - 1
+        // Start and end points need to be somewhere on the border, within the confines of the maze.
+        *x == 0 || *x == grid.width() - 2 ||
+        *y == 0 || *y == grid.height() - 2
     }
 
     fn process_command(&mut self) {
@@ -235,7 +276,7 @@ impl GridState {
                 GridCellKind::Path => &Color { r: 50, g: 50, b: 255 },
                 _ => &Color { r: 255, g: 255, b: 255 },
             },
-            );
+        );
     }
 
     fn draw(
@@ -250,14 +291,14 @@ impl GridState {
             for (x, cell) in row.iter().enumerate() {
                 // Draw left edge
                 if y < grid.height() - 1 {
-                    if cell.has_left_edge && grid[XY(x, y+1)].has_left_edge {
+                    if cell.has_left_edge {
                         self.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
                 // Draw bottom edge
                 if x < grid.width() - 1 {
-                    if cell.has_bottom_edge && grid[XY(x+1, y)].has_bottom_edge {
+                    if cell.has_bottom_edge {
                         self.draw_horizontal_edge(image, x, x+1, y);
                     }
                 }
