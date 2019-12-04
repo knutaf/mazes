@@ -44,9 +44,8 @@ fn draw_box(
 #[derive(Clone)]
 enum GridCellKind {
     Empty,
-    Start,
+    Path(usize),
     End,
-    Path,
 }
 
 #[derive(Clone)]
@@ -66,6 +65,7 @@ type CellGrid = Grid<GridCell>;
 struct GridState {
     mouse_state: MouseState,
     grid: CellGrid,
+    path_point_count: usize,
     next_command: Option<Command>,
 }
 
@@ -80,22 +80,23 @@ impl GridCell {
 }
 
 impl GridState {
-    fn new(width: usize, height: usize) -> GridState {
+    fn new(width: usize, height: usize, path_point_count: usize) -> GridState {
         GridState {
-            grid: Self::create_grid(width, height),
+            grid: Self::create_grid(width, height, path_point_count),
+            path_point_count: path_point_count,
             mouse_state: MouseState::new(),
             next_command: None,
         }
     }
 
-    fn create_grid(width: usize, height: usize) -> CellGrid {
+    fn create_grid(width: usize, height: usize, path_point_count: usize) -> CellGrid {
         let mut grid = CellGrid::new(width, height, &GridCell::new());
 
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
                 let is_inner_cell = x != width - 1 && y != height - 1;
                 *cell = GridCell {
-                    kind: if is_inner_cell { GridCellKind::Path } else { GridCellKind::Empty },
+                    kind: if is_inner_cell { GridCellKind::Path(path_point_count) } else { GridCellKind::Empty },
                     has_bottom_edge: (x != width - 1) && (y == 0 || y == height - 1),
                     has_left_edge: (y != height - 1) && (x == 0 || x == width - 1),
                 }
@@ -110,6 +111,12 @@ impl GridState {
             }
         }
 
+        // if cornered (can't even travel one step in any direction), then restart from the start point
+        // pick a random direction and random distance
+        //    but if this is the last point, then the distance must extend all the way to a wall
+        // check if point is valid on the path
+        // add point to path
+
         let mut end_point;
         loop {
             end_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
@@ -118,7 +125,7 @@ impl GridState {
             }
         }
 
-        grid[start_point.clone()].kind = GridCellKind::Start;
+        grid[start_point.clone()].kind = GridCellKind::Path(0);
         grid[end_point.clone()].kind = GridCellKind::End;
 
         Self::erase_start_or_end_edge(&mut grid, &start_point);
@@ -176,7 +183,7 @@ impl GridState {
     fn process_command(&mut self) {
         match self.next_command {
             Some(Command::Exit) => std::process::exit(0),
-            Some(Command::Refresh) => self.grid = Self::create_grid(self.grid.width(), self.grid.height()),
+            Some(Command::Refresh) => self.grid = Self::create_grid(self.grid.width(), self.grid.height(), self.path_point_count),
             _ => (),
         };
 
@@ -262,18 +269,19 @@ impl GridState {
         ) {
         let cell = &self.grid[XY(x, y)];
 
+        let color = match cell.kind {
+            GridCellKind::End => Color { r: 255, g: 50, b: 50 },
+            GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path_point_count as f32) * 128f32) as u8) },
+            _ => Color { r: 255, g: 255, b: 255 },
+        };
+
         draw_box(
             image,
             (x * SCALE_IN_PX) + CELL_FILL_MARGIN_IN_PX,
             (y * SCALE_IN_PX) + CELL_FILL_MARGIN_IN_PX,
             ((x+1) * SCALE_IN_PX) - CELL_FILL_MARGIN_IN_PX,
             ((y+1) * SCALE_IN_PX) - CELL_FILL_MARGIN_IN_PX,
-            match cell.kind {
-                GridCellKind::Start => &Color { r: 50, g: 255, b: 50},
-                GridCellKind::End => &Color { r: 255, g: 50, b: 50 },
-                GridCellKind::Path => &Color { r: 50, g: 50, b: 255 },
-                _ => &Color { r: 255, g: 255, b: 255 },
-            },
+            &color,
         );
     }
 
@@ -308,7 +316,7 @@ impl GridState {
 }
 
 fn main() {
-    let mut grid_state = GridState::new(10, 10);
+    let mut grid_state = GridState::new(10, 10, 6);
     let grid = &mut grid_state.grid;
 
     // Configure the window that you want to draw in. You can add an event
