@@ -189,7 +189,12 @@ impl GridState {
     }
 
     fn extract_path(grid: &CellGrid) -> Vec<XY> {
-        Vec::new()
+        grid.iter().enumerate().filter_map(|(i, cell)| {
+            match cell.kind {
+                GridCellKind::Path(_) => Some(XY(i % grid.width(), i / grid.width())),
+                _ => None
+            }
+        }).collect()
     }
 
     fn process_command(&mut self) {
