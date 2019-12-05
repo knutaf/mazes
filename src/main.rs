@@ -65,7 +65,7 @@ type CellGrid = Grid<GridCell>;
 struct GridState {
     mouse_state: MouseState,
     grid: CellGrid,
-    path_point_count: usize,
+    path: Vec<XY>,
     next_command: Option<Command>,
 }
 
@@ -81,9 +81,12 @@ impl GridCell {
 
 impl GridState {
     fn new(width: usize, height: usize, path_point_count: usize) -> GridState {
+        let grid = Self::create_grid(width, height, path_point_count);
+        let path = Self::extract_path(&grid);
+
         GridState {
-            grid: Self::create_grid(width, height, path_point_count),
-            path_point_count: path_point_count,
+            grid: grid,
+            path: path,
             mouse_state: MouseState::new(),
             next_command: None,
         }
@@ -180,10 +183,19 @@ impl GridState {
         *y == 0 || *y == grid.height() - 2
     }
 
+    fn update_grid(&mut self) {
+        self.grid = Self::create_grid(self.grid.width(), self.grid.height(), self.path.len());
+        self.path = Self::extract_path(&self.grid);
+    }
+
+    fn extract_path(grid: &CellGrid) -> Vec<XY> {
+        Vec::new()
+    }
+
     fn process_command(&mut self) {
         match self.next_command {
             Some(Command::Exit) => std::process::exit(0),
-            Some(Command::Refresh) => self.grid = Self::create_grid(self.grid.width(), self.grid.height(), self.path_point_count),
+            Some(Command::Refresh) => self.update_grid(),
             _ => (),
         };
 
@@ -271,7 +283,7 @@ impl GridState {
 
         let color = match cell.kind {
             GridCellKind::End => Color { r: 255, g: 50, b: 50 },
-            GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path_point_count as f32) * 128f32) as u8) },
+            GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 128f32) as u8) },
             _ => Color { r: 255, g: 255, b: 255 },
         };
 
