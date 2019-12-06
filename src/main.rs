@@ -97,12 +97,8 @@ impl GridState {
 
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                let is_inner_cell = x != width - 1 && y != height - 1;
-                *cell = GridCell {
-                    kind: if is_inner_cell { GridCellKind::Path(path_point_count) } else { GridCellKind::Empty },
-                    has_bottom_edge: (x != width - 1) && (y == 0 || y == height - 1),
-                    has_left_edge: (y != height - 1) && (x == 0 || x == width - 1),
-                }
+                cell.has_bottom_edge = (x != width - 1) && (y == 0 || y == height - 1);
+                cell.has_left_edge = (y != height - 1) && (x == 0 || x == width - 1);
             }
         }
 
