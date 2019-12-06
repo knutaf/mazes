@@ -102,11 +102,23 @@ impl GridState {
             }
         }
 
-        let mut start_point;
+        let mut path = Vec::new();
+
         loop {
-            start_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
+            let start_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
             if Self::is_valid_start_or_end(&grid, &start_point) {
+                path.push(start_point);
                 break;
+            }
+        }
+
+        while path.len() < path_point_count {
+            loop {
+                let point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
+                if path.iter().find(|&item| { *item == point }).is_none() {
+                    path.push(point);
+                    break;
+                }
             }
         }
 
@@ -116,19 +128,22 @@ impl GridState {
         // check if point is valid on the path
         // add point to path
 
-        let mut end_point;
-        loop {
-            end_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-            if end_point != start_point && Self::is_valid_start_or_end(&grid, &end_point) {
-                break;
-            }
+        let len = path.len();
+        for (i, point) in path.iter_mut().enumerate() {
+            match i {
+                0 => {
+                    grid[point.clone()].kind = GridCellKind::Path(i);
+                    Self::erase_start_or_end_edge(&mut grid, &point);
+                },
+                _ if i == len - 1 => {
+                    grid[point.clone()].kind = GridCellKind::End;
+                    Self::erase_start_or_end_edge(&mut grid, &point);
+                },
+                _ => {
+                    grid[point.clone()].kind = GridCellKind::Path(i);
+                },
+            };
         }
-
-        grid[start_point.clone()].kind = GridCellKind::Path(0);
-        grid[end_point.clone()].kind = GridCellKind::End;
-
-        Self::erase_start_or_end_edge(&mut grid, &start_point);
-        Self::erase_start_or_end_edge(&mut grid, &end_point);
 
         grid
     }
@@ -187,7 +202,7 @@ impl GridState {
     fn extract_path(grid: &CellGrid) -> Vec<XY> {
         grid.iter().enumerate().filter_map(|(i, cell)| {
             match cell.kind {
-                GridCellKind::Path(_) => Some(XY(i % grid.width(), i / grid.width())),
+                GridCellKind::Path(_) | GridCellKind::End => Some(XY(i % grid.width(), i / grid.width())),
                 _ => None
             }
         }).collect()
