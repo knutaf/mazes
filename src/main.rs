@@ -95,6 +95,7 @@ impl GridState {
     fn create_grid(width: usize, height: usize, path_point_count: usize) -> CellGrid {
         let mut grid = CellGrid::new(width, height, &GridCell::new());
 
+        // Turn on walls at the borders.
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
                 cell.has_bottom_edge = (x != width - 1) && (y == 0 || y == height - 1);
@@ -102,25 +103,23 @@ impl GridState {
             }
         }
 
+        // Create the correct path through the maze.
         let mut path = Vec::new();
-
-        loop {
-            let start_point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-            if Self::is_valid_start_or_end(&grid, &start_point) {
-                path.push(start_point);
-                break;
-            }
-        }
 
         while path.len() < path_point_count {
             loop {
                 let point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-                if path.is_empty() {
-                } else {
-                    if path.iter().find(|&item| { *item == point }).is_none() {
-                        path.push(point);
-                        break;
+                let is_valid =
+                    if path.is_empty() {
+                        Self::is_valid_start_or_end(&grid, &point)
                     }
+                    else {
+                        path.iter().find(|&item| { *item == point }).is_none()
+                    };
+
+                if is_valid {
+                    path.push(point);
+                    break;
                 }
             }
         }
