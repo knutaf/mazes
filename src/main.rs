@@ -115,9 +115,12 @@ impl GridState {
         while path.len() < path_point_count {
             loop {
                 let point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-                if path.iter().find(|&item| { *item == point }).is_none() {
-                    path.push(point);
-                    break;
+                if path.is_empty() {
+                } else {
+                    if path.iter().find(|&item| { *item == point }).is_none() {
+                        path.push(point);
+                        break;
+                    }
                 }
             }
         }
@@ -128,6 +131,7 @@ impl GridState {
         // check if point is valid on the path
         // add point to path
 
+        // Now set the path value on every cell in the chosen path.
         let len = path.len();
         for (i, point) in path.iter_mut().enumerate() {
             match i {
@@ -299,7 +303,7 @@ impl GridState {
 
         let color = match cell.kind {
             GridCellKind::End => Color { r: 255, g: 50, b: 50 },
-            GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 128f32) as u8) },
+            GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 255f32) as u8) },
             _ => Color { r: 255, g: 255, b: 255 },
         };
 
