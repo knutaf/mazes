@@ -147,6 +147,8 @@ impl GridState {
             }
         };
 
+        println!("start point ({}, {}, {:?})", start_point.point.0, start_point.point.1, start_point.dir);
+
         path.push(start_point.clone());
 
         let mut iter = 0;
@@ -181,25 +183,42 @@ impl GridState {
                         },
                     };
 
-                let point =
-                    match last_dir {
-                        Direction::Up => XY(last_x, rand::thread_rng().gen_range(last_y, height - 1)),
-                        Direction::Down => XY(last_x, rand::thread_rng().gen_range(0, last_y)),
-                        Direction::Left => XY(rand::thread_rng().gen_range(0, last_x), last_y),
-                        Direction::Right => XY(rand::thread_rng().gen_range(last_x, width - 1), last_y),
-                    };
+                let mut should_reset_path = false;
 
-                println!("considering point ({}, {}, {:?})", point.0, point.1, dir);
+                match dir {
+                    Direction::Up if last_y == height - 2 => should_reset_path = true,
+                    Direction::Down if last_y == 0 => should_reset_path = true,
+                    Direction::Left if last_x == 0 => should_reset_path = true,
+                    Direction::Right if last_x == width - 2 => should_reset_path = true,
+                    _ => ()
+                };
 
-                let is_valid =
-                    path.iter().find(|&item| { item.point == point }).is_none() &&
-                    ((path.len() != path_point_count - 1) || Self::is_valid_start_or_end(&grid, &point));
+                if !should_reset_path {
+                    let point =
+                        match last_dir {
+                            Direction::Up => XY(last_x, rand::thread_rng().gen_range(last_y, height - 1)),
+                            Direction::Down => XY(last_x, rand::thread_rng().gen_range(0, last_y)),
+                            Direction::Left => XY(rand::thread_rng().gen_range(0, last_x), last_y),
+                            Direction::Right => XY(rand::thread_rng().gen_range(last_x, width - 1), last_y),
+                        };
 
-                if is_valid {
-                    path.push(PathPoint { point, dir: Direction::Up });
-                    break;
+                    println!("considering point ({}, {}, {:?})", point.0, point.1, dir);
+
+                    let is_valid =
+                        path.iter().find(|&item| { item.point == point }).is_none() &&
+                        ((path.len() != path_point_count - 1) || Self::is_valid_start_or_end(&grid, &point));
+
+                    if is_valid {
+                        path.push(PathPoint { point, dir });
+                        println!("added. len now {}", path.len());
+                        break;
+                    }
+                    else if path.len() == path_point_count - 1 {
+                        should_reset_path = true;
+                    }
                 }
-                else {
+
+                if should_reset_path {
                     let XY(last_x, last_y) = path.last().unwrap().point.clone();
                     println!("resetting iteration {}, path length {} out of {}. start point ({}, {}, {:?}). last point ({}, {}, {:?})", iter, path.len(), path_point_count, start_point.point.0, start_point.point.1, start_point.dir, last_x, last_y, last_dir);
                     iter += 1;
