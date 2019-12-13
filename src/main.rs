@@ -48,11 +48,18 @@ enum GridCellKind {
     End,
 }
 
+#[derive(Clone, PartialEq)]
+enum EdgeState {
+    Unset,
+    Off,
+    On,
+}
+
 #[derive(Clone)]
 struct GridCell {
     kind: GridCellKind,
-    has_left_edge: bool,
-    has_bottom_edge: bool,
+    left_edge: EdgeState,
+    bottom_edge: EdgeState,
 }
 
 #[derive(Clone)]
@@ -73,8 +80,8 @@ impl GridCell {
     fn new() -> GridCell {
         GridCell {
             kind: GridCellKind::Empty,
-            has_left_edge: false,
-            has_bottom_edge: false,
+            left_edge: EdgeState::Unset,
+            bottom_edge: EdgeState::Unset,
         }
     }
 }
@@ -98,8 +105,8 @@ impl GridState {
         // Turn on walls at the borders.
         for (y, row) in grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
-                cell.has_bottom_edge = (x != width - 1) && (y == 0 || y == height - 1);
-                cell.has_left_edge = (y != height - 1) && (x == 0 || x == width - 1);
+                cell.bottom_edge = if (x != width - 1) && (y == 0 || y == height - 1) { EdgeState::On } else { EdgeState::Unset };
+                cell.left_edge = if (y != height - 1) && (x == 0 || x == width - 1) { EdgeState::On } else { EdgeState::Unset };
             }
         }
 
@@ -121,7 +128,7 @@ impl GridState {
         let mut path = Vec::<PathPoint>::new();
 
         // For now choose the start point in a corner
-        let start_point = {
+        let start = {
             let start_bottom = rand::thread_rng().gen_bool(0.5);
             let start_left = rand::thread_rng().gen_bool(0.5);
             let start_points_vertical = rand::thread_rng().gen_bool(0.5);
@@ -147,24 +154,21 @@ impl GridState {
             }
         };
 
-        println!("start point ({}, {}, {:?})", start_point.point.0, start_point.point.1, start_point.dir);
+        println!("start point ({}, {}, {:?})", start.point.0, start.point.1, start.dir);
 
-        path.push(start_point.clone());
+        path.push(start.clone());
 
         let mut iter = 0;
         while path.len() < path_point_count {
             loop {
-                let start_left = start_point.point.0 == 0;
-                let start_bottom = start_point.point.1 == 0;
-
-                // TODO deconstruct maybe
-                let XY(last_x, last_y) = path.last().unwrap().point.clone();
-                let last_dir = &path.last().unwrap().dir;
+                let start_left = start.point.0 == 0;
+                let start_bottom = start.point.1 == 0;
+                let last = &path.last().unwrap();
 
                 // Alternate directions. respect whether moving from left to right and up to down
                 // or the other way.
                 let dir =
-                    match last_dir {
+                    match last.dir {
                         Direction::Up | Direction::Down => {
                             if start_left {
                                 Direction::Right
@@ -186,20 +190,20 @@ impl GridState {
                 let mut should_reset_path = false;
 
                 match dir {
-                    Direction::Up if last_y == height - 2 => should_reset_path = true,
-                    Direction::Down if last_y == 0 => should_reset_path = true,
-                    Direction::Left if last_x == 0 => should_reset_path = true,
-                    Direction::Right if last_x == width - 2 => should_reset_path = true,
+                    Direction::Up if last.point.1 == height - 2 => should_reset_path = true,
+                    Direction::Down if last.point.1 == 0 => should_reset_path = true,
+                    Direction::Left if last.point.0 == 0 => should_reset_path = true,
+                    Direction::Right if last.point.0 == width - 2 => should_reset_path = true,
                     _ => ()
                 };
 
                 if !should_reset_path {
                     let point =
-                        match last_dir {
-                            Direction::Up => XY(last_x, rand::thread_rng().gen_range(last_y, height - 1)),
-                            Direction::Down => XY(last_x, rand::thread_rng().gen_range(0, last_y)),
-                            Direction::Left => XY(rand::thread_rng().gen_range(0, last_x), last_y),
-                            Direction::Right => XY(rand::thread_rng().gen_range(last_x, width - 1), last_y),
+                        match last.dir {
+                            Direction::Up => XY(last.point.0, rand::thread_rng().gen_range(last.point.1, height - 1)),
+                            Direction::Down => XY(last.point.0, rand::thread_rng().gen_range(0, last.point.1)),
+                            Direction::Left => XY(rand::thread_rng().gen_range(0, last.point.0), last.point.1),
+                            Direction::Right => XY(rand::thread_rng().gen_range(last.point.0, width - 1), last.point.1),
                         };
 
                     println!("considering point ({}, {}, {:?})", point.0, point.1, dir);
@@ -219,11 +223,10 @@ impl GridState {
                 }
 
                 if should_reset_path {
-                    let XY(last_x, last_y) = path.last().unwrap().point.clone();
-                    println!("resetting iteration {}, path length {} out of {}. start point ({}, {}, {:?}). last point ({}, {}, {:?})", iter, path.len(), path_point_count, start_point.point.0, start_point.point.1, start_point.dir, last_x, last_y, last_dir);
+                    println!("resetting iteration {}, path length {} out of {}. start point ({}, {}, {:?}). last point ({}, {}, {:?})", iter, path.len(), path_point_count, start.point.0, start.point.1, start.dir, last.point.0, last.point.1, last.dir);
                     iter += 1;
                     path.clear();
-                    path.push(start_point.clone());
+                    path.push(start.clone());
                 }
             }
         }
@@ -274,9 +277,9 @@ impl GridState {
         // outside the border) and erasing the left edge.
         if erase_vertical_edge {
             if x == grid.width() - 2 {
-                grid[XY(x + 1, y)].has_left_edge = false;
+                grid[XY(x + 1, y)].left_edge = EdgeState::Off;
             } else {
-                grid[XY(x, y)].has_left_edge = false;
+                grid[XY(x, y)].left_edge = EdgeState::Off;
             }
         }
 
@@ -284,9 +287,9 @@ impl GridState {
         // border) and erasing the bottom edge.
         else {
             if y == grid.height() - 2 {
-                grid[XY(x, y + 1)].has_bottom_edge = false;
+                grid[XY(x, y + 1)].bottom_edge = EdgeState::Off;
             } else {
-                grid[XY(x, y)].has_bottom_edge = false;
+                grid[XY(x, y)].bottom_edge = EdgeState::Off;
             }
         }
     }
@@ -432,14 +435,14 @@ impl GridState {
             for (x, cell) in row.iter().enumerate() {
                 // Draw left edge
                 if y < grid.height() - 1 {
-                    if cell.has_left_edge {
+                    if cell.left_edge == EdgeState::On {
                         self.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
                 // Draw bottom edge
                 if x < grid.width() - 1 {
-                    if cell.has_bottom_edge {
+                    if cell.bottom_edge == EdgeState::On {
                         self.draw_horizontal_edge(image, x, x+1, y);
                     }
                 }
