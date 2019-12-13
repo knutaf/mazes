@@ -103,23 +103,108 @@ impl GridState {
             }
         }
 
-        // Create the correct path through the maze.
-        let mut path = Vec::new();
+        #[derive(Clone, Debug)]
+        enum Direction {
+            Up,
+            Down,
+            Left,
+            Right,
+        }
 
+        #[derive(Clone)]
+        struct PathPoint {
+            point: XY,
+            dir: Direction,
+        }
+
+        // Create the correct path through the maze.
+        let mut path = Vec::<PathPoint>::new();
+
+        // For now choose the start point in a corner
+        let start_point = {
+            let start_bottom = rand::thread_rng().gen_bool(0.5);
+            let start_left = rand::thread_rng().gen_bool(0.5);
+            let start_points_vertical = rand::thread_rng().gen_bool(0.5);
+
+            PathPoint {
+                point: XY(if start_left { 0 } else { width - 2 }, if start_bottom { 0 } else { height - 2 }),
+                dir: if start_points_vertical {
+                         if start_bottom {
+                             Direction::Up
+                         }
+                         else {
+                             Direction::Down
+                         }
+                     }
+                     else {
+                         if start_left {
+                             Direction::Right
+                         }
+                         else {
+                             Direction::Left
+                         }
+                     },
+            }
+        };
+
+        path.push(start_point.clone());
+
+        let mut iter = 0;
         while path.len() < path_point_count {
             loop {
-                let point = XY(rand::thread_rng().gen_range(0, width - 1), rand::thread_rng().gen_range(0, height - 1));
-                let is_valid =
-                    if path.is_empty() {
-                        Self::is_valid_start_or_end(&grid, &point)
-                    }
-                    else {
-                        path.iter().find(|&item| { *item == point }).is_none()
+                let start_left = start_point.point.0 == 0;
+                let start_bottom = start_point.point.1 == 0;
+
+                // TODO deconstruct maybe
+                let XY(last_x, last_y) = path.last().unwrap().point.clone();
+                let last_dir = &path.last().unwrap().dir;
+
+                // Alternate directions. respect whether moving from left to right and up to down
+                // or the other way.
+                let dir =
+                    match last_dir {
+                        Direction::Up | Direction::Down => {
+                            if start_left {
+                                Direction::Right
+                            }
+                            else {
+                                Direction::Left
+                            }
+                        },
+                        Direction::Left | Direction::Right => {
+                            if start_bottom {
+                                Direction::Up
+                            }
+                            else {
+                                Direction::Down
+                            }
+                        },
                     };
 
+                let point =
+                    match last_dir {
+                        Direction::Up => XY(last_x, rand::thread_rng().gen_range(last_y, height - 1)),
+                        Direction::Down => XY(last_x, rand::thread_rng().gen_range(0, last_y)),
+                        Direction::Left => XY(rand::thread_rng().gen_range(0, last_x), last_y),
+                        Direction::Right => XY(rand::thread_rng().gen_range(last_x, width - 1), last_y),
+                    };
+
+                println!("considering point ({}, {}, {:?})", point.0, point.1, dir);
+
+                let is_valid =
+                    path.iter().find(|&item| { item.point == point }).is_none() &&
+                    ((path.len() != path_point_count - 1) || Self::is_valid_start_or_end(&grid, &point));
+
                 if is_valid {
-                    path.push(point);
+                    path.push(PathPoint { point, dir: Direction::Up });
                     break;
+                }
+                else {
+                    let XY(last_x, last_y) = path.last().unwrap().point.clone();
+                    println!("resetting iteration {}, path length {} out of {}. start point ({}, {}, {:?}). last point ({}, {}, {:?})", iter, path.len(), path_point_count, start_point.point.0, start_point.point.1, start_point.dir, last_x, last_y, last_dir);
+                    iter += 1;
+                    path.clear();
+                    path.push(start_point.clone());
                 }
             }
         }
@@ -135,15 +220,15 @@ impl GridState {
         for (i, point) in path.iter_mut().enumerate() {
             match i {
                 0 => {
-                    grid[point.clone()].kind = GridCellKind::Path(i);
-                    Self::erase_start_or_end_edge(&mut grid, &point);
+                    grid[point.point.clone()].kind = GridCellKind::Path(i);
+                    Self::erase_start_or_end_edge(&mut grid, &point.point);
                 },
                 _ if i == len - 1 => {
-                    grid[point.clone()].kind = GridCellKind::End;
-                    Self::erase_start_or_end_edge(&mut grid, &point);
+                    grid[point.point.clone()].kind = GridCellKind::End;
+                    Self::erase_start_or_end_edge(&mut grid, &point.point);
                 },
                 _ => {
-                    grid[point.clone()].kind = GridCellKind::Path(i);
+                    grid[point.point.clone()].kind = GridCellKind::Path(i);
                 },
             };
         }
