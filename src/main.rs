@@ -52,6 +52,7 @@ enum GridCellKind {
 enum EdgeState {
     Unset,
     Off,
+    ProvisionallyOn,
     On,
 }
 
@@ -82,6 +83,20 @@ impl GridCell {
             kind: GridCellKind::Empty,
             left_edge: EdgeState::Unset,
             bottom_edge: EdgeState::Unset,
+        }
+    }
+
+    fn has_left_edge(&self) -> bool {
+        match self.left_edge {
+            EdgeState::On | EdgeState::ProvisionallyOn => true,
+            _ => false,
+        }
+    }
+
+    fn has_bottom_edge(&self) -> bool {
+        match self.bottom_edge {
+            EdgeState::On | EdgeState::ProvisionallyOn => true,
+            _ => false,
         }
     }
 }
@@ -255,6 +270,7 @@ impl GridState {
             };
         }
 
+        // Walk the path and erase edges to ensure the path is open.
         path.iter().fold(None, |last_opt : Option<&PathPoint>, step| {
             if let Some(last) = last_opt {
                 let XY(mut x, mut y) = last.point;
@@ -283,16 +299,43 @@ impl GridState {
             Some(step)
         });
 
-        // TODO: do this randomly. for now filing in all other edges
-        for (y, row) in grid.chunks_mut(width).enumerate() {
-            for (x, cell) in row.iter_mut().enumerate() {
-                if cell.bottom_edge == EdgeState::Unset {
-                    cell.bottom_edge = EdgeState::On;
+        iter = 0;
+        while !Self::has_valid_edges(&grid) {
+            // Reset all provisionally-on edges to unset to try again.
+            for cell in grid.iter_mut() {
+                if cell.bottom_edge == EdgeState::ProvisionallyOn {
+                    cell.bottom_edge = EdgeState::Unset;
                 }
 
-                if cell.left_edge == EdgeState::Unset {
-                    cell.left_edge = EdgeState::On;
+                if cell.left_edge == EdgeState::ProvisionallyOn {
+                    cell.left_edge = EdgeState::Unset;
                 }
+            }
+
+            // Turn on edges randomly
+            for cell in grid.iter_mut() {
+                if cell.bottom_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.5) {
+                    cell.bottom_edge = EdgeState::ProvisionallyOn;
+                }
+
+                if cell.left_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.5) {
+                    cell.left_edge = EdgeState::ProvisionallyOn;
+                }
+            }
+
+            iter += 1;
+        }
+
+        println!("took {} iterations to get valid borders", iter);
+
+        // Make all the provisional edges real
+        for cell in grid.iter_mut() {
+            if cell.bottom_edge == EdgeState::ProvisionallyOn {
+                cell.bottom_edge = EdgeState::On;
+            }
+
+            if cell.left_edge == EdgeState::ProvisionallyOn {
+                cell.left_edge = EdgeState::On;
             }
         }
 
@@ -343,6 +386,52 @@ impl GridState {
         // Start and end points need to be somewhere on the border, within the confines of the maze.
         *x == 0 || *x == grid.width() - 2 ||
         *y == 0 || *y == grid.height() - 2
+    }
+
+    fn count_exits(&self, point: &XY) -> usize {
+        let mut exit_count = 0;
+
+        let cell = &self.grid[point.clone()];
+        if point.0 > 0 && !cell.has_left_edge() {
+            exit_count += 1;
+        }
+
+        if point.1 > 0 && !cell.has_bottom_edge() {
+            exit_count += 1;
+        }
+
+        if self.grid[XY(point.0 + 1, point.1)].has_left_edge() {
+            exit_count += 1;
+        }
+
+        if self.grid[XY(point.0, point.1 + 1)].has_bottom_edge() {
+            exit_count += 1;
+        }
+
+        exit_count
+    }
+
+    fn has_valid_edges(grid: &CellGrid) -> bool {
+        for y in 0 .. grid.height() - 1 {
+            for x in 0 .. grid.width() - 1 {
+                if grid[XY(x+1, y)].has_left_edge() {
+                    continue;
+                }
+
+                if grid[XY(x, y+1)].has_bottom_edge() {
+                    continue;
+                }
+
+                let cell = &grid[XY(x+1, y+1)];
+                if cell.has_bottom_edge() || cell.has_left_edge() {
+                    continue;
+                }
+
+                return false;
+            }
+        }
+
+        true
     }
 
     fn update_grid(&mut self) {
