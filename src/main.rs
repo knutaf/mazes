@@ -255,6 +255,47 @@ impl GridState {
             };
         }
 
+        path.iter().fold(None, |last_opt : Option<&PathPoint>, step| {
+            if let Some(last) = last_opt {
+                let XY(mut x, mut y) = last.point;
+                while x != step.point.0 || y != step.point.1 {
+                    match last.dir {
+                        Direction::Up => {
+                            grid[XY(x, y+1)].bottom_edge = EdgeState::Off;
+                            y += 1;
+                        },
+                        Direction::Down => {
+                            grid[XY(x, y)].bottom_edge = EdgeState::Off;
+                            y -= 1;
+                        },
+                        Direction::Left => {
+                            grid[XY(x, y)].left_edge = EdgeState::Off;
+                            x -= 1;
+                        },
+                        Direction::Right => {
+                            grid[XY(x+1, y)].left_edge = EdgeState::Off;
+                            x += 1;
+                        },
+                    }
+                }
+            }
+
+            Some(step)
+        });
+
+        // TODO: do this randomly. for now filing in all other edges
+        for (y, row) in grid.chunks_mut(width).enumerate() {
+            for (x, cell) in row.iter_mut().enumerate() {
+                if cell.bottom_edge == EdgeState::Unset {
+                    cell.bottom_edge = EdgeState::On;
+                }
+
+                if cell.left_edge == EdgeState::Unset {
+                    cell.left_edge = EdgeState::On;
+                }
+            }
+        }
+
         grid
     }
 
