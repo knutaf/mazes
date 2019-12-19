@@ -46,6 +46,7 @@ fn draw_box(
 enum GridCellKind {
     Empty,
     Path(usize),
+    PathIntermediate,
     End,
 }
 
@@ -280,19 +281,35 @@ impl GridState {
                 while x != step.point.0 || y != step.point.1 {
                     match last.dir {
                         Direction::Up => {
-                            grid[XY(x, y+1)].bottom_edge = EdgeState::Off;
+                            let cell = &mut grid[XY(x, y+1)];
+                            cell.bottom_edge = EdgeState::Off;
+                            if let GridCellKind::Empty = cell.kind {
+                                cell.kind = GridCellKind::PathIntermediate;
+                            }
                             y += 1;
                         },
                         Direction::Down => {
-                            grid[XY(x, y)].bottom_edge = EdgeState::Off;
+                            let cell = &mut grid[XY(x, y)];
+                            cell.bottom_edge = EdgeState::Off;
+                            if let GridCellKind::Empty = cell.kind {
+                                cell.kind = GridCellKind::PathIntermediate;
+                            }
                             y -= 1;
                         },
                         Direction::Left => {
-                            grid[XY(x, y)].left_edge = EdgeState::Off;
+                            let cell = &mut grid[XY(x, y)];
+                            cell.left_edge = EdgeState::Off;
+                            if let GridCellKind::Empty = cell.kind {
+                                cell.kind = GridCellKind::PathIntermediate;
+                            }
                             x -= 1;
                         },
                         Direction::Right => {
-                            grid[XY(x+1, y)].left_edge = EdgeState::Off;
+                            let cell = &mut grid[XY(x+1, y)];
+                            cell.left_edge = EdgeState::Off;
+                            if let GridCellKind::Empty = cell.kind {
+                                cell.kind = GridCellKind::PathIntermediate;
+                            }
                             x += 1;
                         },
                     }
@@ -663,11 +680,18 @@ impl GridState {
         ) {
         let cell = &self.grid[XY(x, y)];
 
-        let color = match cell.kind {
-            GridCellKind::End if self.should_draw_path => Color { r: 255, g: 50, b: 50 },
-            GridCellKind::Path(n) if self.should_draw_path => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 255f32) as u8) },
-            _ => Color { r: 255, g: 255, b: 255 },
-        };
+        let color =
+            if self.should_draw_path {
+                match cell.kind {
+                    GridCellKind::End => Color { r: 255, g: 50, b: 50 },
+                    GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 255f32) as u8) },
+                    GridCellKind::PathIntermediate => Color { r: 100, g: 100, b: 100 },
+                    _ => Color { r: 255, g: 255, b: 255 },
+                }
+            }
+            else {
+                Color { r: 255, g: 255, b: 255 }
+            };
 
         draw_box(
             image,
