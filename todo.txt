@@ -7,7 +7,9 @@ DONE - track the points in the path through the maze
 DONE - generate random walls for the other cells in the maze
 - implement checker to tell if a cell is valid or not:
   DONE - each group of 4 cells in a square must have at least one inner wall
-  - every cell should be reachable
+  DONE - every cell should be reachable
+  - walls must be connected to N or more other wall sections
 DONE - generate walls for other cells until valid
 - allow start and end point to be on the same wall or whatever
 - tighten up drawing (thick edges are badly aligned, upper-right corner has an empty gap, window border exceeds maze walls
+- consider adding an option that allows only one valid path through the maze

@@ -299,8 +299,8 @@ impl GridState {
             Some(step)
         });
 
-        iter = 0;
-        while !Self::has_valid_edges(&grid) {
+        iter = 1;
+        loop {
             // Reset all provisionally-on edges to unset to try again.
             for cell in grid.iter_mut() {
                 if cell.bottom_edge == EdgeState::ProvisionallyOn {
@@ -314,13 +314,28 @@ impl GridState {
 
             // Turn on edges randomly
             for cell in grid.iter_mut() {
-                if cell.bottom_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.5) {
+                if cell.bottom_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.8) {
                     cell.bottom_edge = EdgeState::ProvisionallyOn;
                 }
 
-                if cell.left_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.5) {
+                if cell.left_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.8) {
                     cell.left_edge = EdgeState::ProvisionallyOn;
                 }
+            }
+
+            // Scan for enclosed cells and erase one edge to make them less invalid.
+            // TODO: scan for enclosed areas and open them.
+            for y in 0 .. grid.height() - 1 {
+                for x in 0 .. grid.width() - 1 {
+                    let point = XY(x, y);
+                    if Self::count_exits(&grid, &point) == 0 {
+                        Self::erase_random_non_border_edge(&mut grid, &point);
+                    }
+                }
+            }
+
+            if Self::has_valid_edges(&grid) {
+                break;
             }
 
             iter += 1;
@@ -378,6 +393,48 @@ impl GridState {
         }
     }
 
+    fn erase_random_non_border_edge(grid: &mut CellGrid, point: &XY) {
+        let mut edges = [None, None, None, None];
+        let mut edge_count = 0;
+
+        let cell = &grid[point.clone()];
+        let adjacent_right_point = XY(point.0 + 1, point.1);
+        let adjacent_above_point = XY(point.0, point.1 + 1);
+
+        struct CellEdge {
+            point: XY,
+            is_left_edge: bool,
+        }
+
+        if point.0 > 0 && cell.has_left_edge() {
+            edges[edge_count] = Some(CellEdge { point: point.clone(), is_left_edge: true });
+            edge_count += 1;
+        }
+
+        if point.1 > 0 && cell.has_bottom_edge() {
+            edges[edge_count] = Some(CellEdge { point: point.clone(), is_left_edge: false });
+            edge_count += 1;
+        }
+
+        if point.0 < grid.width() - 2 && grid[adjacent_right_point.clone()].has_left_edge() {
+            edges[edge_count] = Some(CellEdge { point: adjacent_right_point.clone(), is_left_edge: true });
+            edge_count += 1;
+        }
+
+        if point.1 < grid.height() - 2 && grid[adjacent_above_point.clone()].has_bottom_edge() {
+            edges[edge_count] = Some(CellEdge { point: adjacent_above_point.clone(), is_left_edge: false });
+            edge_count += 1;
+        }
+
+        let edge_to_erase = &edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap();
+        if edge_to_erase.is_left_edge {
+            grid[edge_to_erase.point.clone()].left_edge = EdgeState::Unset;
+        }
+        else {
+            grid[edge_to_erase.point.clone()].bottom_edge = EdgeState::Unset;
+        }
+    }
+
     fn is_valid_start_or_end(
         grid: &CellGrid,
         XY(x, y): &XY,
@@ -388,23 +445,23 @@ impl GridState {
         *y == 0 || *y == grid.height() - 2
     }
 
-    fn count_exits(&self, point: &XY) -> usize {
+    fn count_exits(grid: &CellGrid, point: &XY) -> usize {
         let mut exit_count = 0;
 
-        let cell = &self.grid[point.clone()];
-        if point.0 > 0 && !cell.has_left_edge() {
+        let cell = &grid[point.clone()];
+        if !cell.has_left_edge() {
             exit_count += 1;
         }
 
-        if point.1 > 0 && !cell.has_bottom_edge() {
+        if !cell.has_bottom_edge() {
             exit_count += 1;
         }
 
-        if self.grid[XY(point.0 + 1, point.1)].has_left_edge() {
+        if !grid[XY(point.0 + 1, point.1)].has_left_edge() {
             exit_count += 1;
         }
 
-        if self.grid[XY(point.0, point.1 + 1)].has_bottom_edge() {
+        if !grid[XY(point.0, point.1 + 1)].has_bottom_edge() {
             exit_count += 1;
         }
 
@@ -412,26 +469,88 @@ impl GridState {
     }
 
     fn has_valid_edges(grid: &CellGrid) -> bool {
-        for y in 0 .. grid.height() - 1 {
-            for x in 0 .. grid.width() - 1 {
-                if grid[XY(x+1, y)].has_left_edge() {
-                    continue;
-                }
+        fn has_inner_grid_walls(grid: &CellGrid) -> bool {
+            // For every 2x2 sub-grid, there must be at least one inner wall
+            for y in 0 .. grid.height() - 1 {
+                for x in 0 .. grid.width() - 1 {
+                    if grid[XY(x+1, y)].has_left_edge() {
+                        continue;
+                    }
 
-                if grid[XY(x, y+1)].has_bottom_edge() {
-                    continue;
-                }
+                    if grid[XY(x, y+1)].has_bottom_edge() {
+                        continue;
+                    }
 
-                let cell = &grid[XY(x+1, y+1)];
-                if cell.has_bottom_edge() || cell.has_left_edge() {
-                    continue;
-                }
+                    let cell = &grid[XY(x+1, y+1)];
+                    if cell.has_left_edge() || cell.has_bottom_edge() {
+                        continue;
+                    }
 
-                return false;
+                    //println!("no inner edges");
+                    return false;
+                }
             }
+
+            true
+        }
+
+        fn are_all_cells_open(grid: &CellGrid) -> bool {
+            // Every cell must have at least one exit
+            for y in 0 .. grid.height() - 1 {
+                for x in 0 .. grid.width() - 1 {
+                    if GridState::count_exits(grid, &XY(x, y)) == 0 {
+                        //println!("zero-exit cell");
+                        return false;
+                    }
+                }
+            }
+
+            true
+        }
+
+        fn are_all_cells_reachable(grid: &CellGrid) -> bool {
+            // Every cell must be reachable
+            let traversal = GridState::visit_all(&grid);
+            traversal.iter().find(|&item| { !item }).is_none()
         }
 
         true
+        && has_inner_grid_walls(grid)
+        //&& are_all_cells_open(grid)
+        //&& are_all_cells_reachable(grid)
+    }
+
+    fn visit_all(grid: &CellGrid) -> Grid<bool> {
+        fn visit(grid: &CellGrid, traversal: &mut Grid<bool>, x: usize, y: usize) {
+            let traversal_cell = &mut traversal[XY(x, y)];
+            if *traversal_cell {
+                // already visited
+                return;
+            }
+
+            *traversal_cell = true;
+
+            if x > 0 && !grid[XY(x, y)].has_left_edge() {
+                visit(grid, traversal, x - 1, y);
+            }
+
+            if y > 0 && !grid[XY(x, y)].has_bottom_edge() {
+                visit(grid, traversal, x, y - 1);
+            }
+
+            if x < traversal.width() - 1 && !grid[XY(x + 1, y)].has_left_edge() {
+                visit(grid, traversal, x + 1, y);
+            }
+
+            if y < traversal.height() - 1 && !grid[XY(x, y + 1)].has_bottom_edge() {
+                visit(grid, traversal, x, y + 1);
+            }
+        }
+
+        let mut traversal = Grid::new(grid.width() - 1, grid.height() - 1, &false);
+        visit(grid, &mut traversal, 0, 0);
+
+        traversal
     }
 
     fn update_grid(&mut self) {
