@@ -25,6 +25,7 @@ use grid::{Grid, XY};
 const SCALE_IN_PX: usize = 50;
 const CELL_FILL_MARGIN_IN_PX: usize  = 10;
 const EDGE_THICKNESS_IN_PX: usize = 5;
+const EDGE_ENABLED_CHANCE: f32 = 0.8;
 
 fn draw_box(
     image: &mut Image,
@@ -75,6 +76,7 @@ struct GridState {
     grid: CellGrid,
     path: Vec<XY>,
     next_command: Option<Command>,
+    should_draw_path: bool,
 }
 
 impl GridCell {
@@ -111,6 +113,7 @@ impl GridState {
             path: path,
             mouse_state: MouseState::new(),
             next_command: None,
+            should_draw_path: true,
         }
     }
 
@@ -254,7 +257,7 @@ impl GridState {
 
         // Now set the path value on every cell in the chosen path.
         let len = path.len();
-        for (i, point) in path.iter_mut().enumerate() {
+        for (i, point) in path.iter().enumerate() {
             match i {
                 0 => {
                     grid[point.point.clone()].kind = GridCellKind::Path(i);
@@ -600,6 +603,10 @@ impl GridState {
                     state.next_command = match vk {
                         VirtualKeyCode::Escape => Some(Command::Exit),
                         VirtualKeyCode::F5 => Some(Command::Refresh),
+                        VirtualKeyCode::P => {
+                            state.should_draw_path = !state.should_draw_path;
+                            None
+                        },
                         _ => None
                     };
 
@@ -628,7 +635,7 @@ impl GridState {
             y1 * SCALE_IN_PX,
             (x * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
             y2 * SCALE_IN_PX,
-            &Color { r: 0, g: 0, b: 255});
+            &Color { r: 0, g: 0, b: 0});
     }
 
     fn draw_horizontal_edge(
@@ -645,7 +652,7 @@ impl GridState {
             y * SCALE_IN_PX,
             x2 * SCALE_IN_PX,
             (y * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
-            &Color { r: 255, g: 0, b: 0});
+            &Color { r: 0, g: 0, b: 0});
     }
 
     fn draw_cell(
@@ -657,8 +664,8 @@ impl GridState {
         let cell = &self.grid[XY(x, y)];
 
         let color = match cell.kind {
-            GridCellKind::End => Color { r: 255, g: 50, b: 50 },
-            GridCellKind::Path(n) => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 255f32) as u8) },
+            GridCellKind::End if self.should_draw_path => Color { r: 255, g: 50, b: 50 },
+            GridCellKind::Path(n) if self.should_draw_path => Color { r: 50, g: 50, b: 255 - (((n as f32 / self.path.len() as f32) * 255f32) as u8) },
             _ => Color { r: 255, g: 255, b: 255 },
         };
 
