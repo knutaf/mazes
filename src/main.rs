@@ -50,7 +50,7 @@ enum GridCellKind {
     End,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 enum EdgeState {
     Unset,
     Off,
@@ -323,23 +323,27 @@ impl GridState {
         loop {
             // Reset all provisionally-on edges to unset to try again.
             for cell in grid.iter_mut() {
-                if cell.bottom_edge == EdgeState::ProvisionallyOn {
+                if let EdgeState::ProvisionallyOn = cell.bottom_edge {
                     cell.bottom_edge = EdgeState::Unset;
                 }
 
-                if cell.left_edge == EdgeState::ProvisionallyOn {
+                if let EdgeState::ProvisionallyOn = cell.left_edge {
                     cell.left_edge = EdgeState::Unset;
                 }
             }
 
             // Turn on edges randomly
             for cell in grid.iter_mut() {
-                if cell.bottom_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.8) {
-                    cell.bottom_edge = EdgeState::ProvisionallyOn;
+                if let EdgeState::Unset = cell.bottom_edge {
+                    if rand::thread_rng().gen_bool(0.8) {
+                        cell.bottom_edge = EdgeState::ProvisionallyOn;
+                    }
                 }
 
-                if cell.left_edge == EdgeState::Unset && rand::thread_rng().gen_bool(0.8) {
-                    cell.left_edge = EdgeState::ProvisionallyOn;
+                if let EdgeState::Unset = cell.left_edge {
+                    if rand::thread_rng().gen_bool(0.8) {
+                        cell.left_edge = EdgeState::ProvisionallyOn;
+                    }
                 }
             }
 
@@ -365,11 +369,11 @@ impl GridState {
 
         // Make all the provisional edges real
         for cell in grid.iter_mut() {
-            if cell.bottom_edge == EdgeState::ProvisionallyOn {
+            if let EdgeState::ProvisionallyOn = cell.bottom_edge {
                 cell.bottom_edge = EdgeState::On;
             }
 
-            if cell.left_edge == EdgeState::ProvisionallyOn {
+            if let EdgeState::ProvisionallyOn = cell.left_edge {
                 cell.left_edge = EdgeState::On;
             }
         }
@@ -715,14 +719,14 @@ impl GridState {
             for (x, cell) in row.iter().enumerate() {
                 // Draw left edge
                 if y < grid.height() - 1 {
-                    if cell.left_edge == EdgeState::On {
+                    if let EdgeState::On = cell.left_edge {
                         self.draw_vertical_edge(image, x, y, y+1);
                     }
                 }
 
                 // Draw bottom edge
                 if x < grid.width() - 1 {
-                    if cell.bottom_edge == EdgeState::On {
+                    if let EdgeState::On = cell.bottom_edge {
                         self.draw_horizontal_edge(image, x, x+1, y);
                     }
                 }
