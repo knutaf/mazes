@@ -20,7 +20,7 @@ pub struct RC(pub usize, pub usize);
 
 /// An x/y pair for indexing into the grid.
 /// Distinct from a row/column pair.
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct XY(pub usize, pub usize);
 
 impl<CellType> Grid<CellType>
@@ -33,6 +33,11 @@ impl<CellType> Grid<CellType>
     /// The height of the grid in cells.
     pub fn height(&self) -> usize {
         self.height
+    }
+
+    /// Converts an index into the cells vector into an XY coordinate.
+    pub fn index_to_xy(&self, index: usize) -> XY {
+        XY(index % self.width(), index / self.width())
     }
 
     /// Create a blank grid with the given dimensions.
@@ -60,18 +65,33 @@ impl<CellType> IndexMut<RC> for Grid<CellType>
     }
 }
 
+impl<CellType> Index<&XY> for Grid<CellType>
+    where CellType : Clone {
+    type Output = CellType;
+    fn index(&self, XY(x, y): &XY) -> &Self::Output {
+        &self.cells[(*y * self.width + *x) as usize]
+    }
+}
+
 impl<CellType> Index<XY> for Grid<CellType>
     where CellType : Clone {
     type Output = CellType;
-    fn index(&self, XY(x, y): XY) -> &Self::Output {
-        &self.cells[(y * self.width + x) as usize]
+    fn index(&self, xy: XY) -> &Self::Output {
+        self.index(&xy)
+    }
+}
+
+impl<CellType> IndexMut<&XY> for Grid<CellType>
+    where CellType : Clone {
+    fn index_mut(&mut self, XY(x, y): &XY) -> &mut Self::Output {
+        &mut self.cells[(*y * self.width + *x) as usize]
     }
 }
 
 impl<CellType> IndexMut<XY> for Grid<CellType>
     where CellType : Clone {
-    fn index_mut(&mut self, XY(x, y): XY) -> &mut Self::Output {
-        &mut self.cells[(y * self.width + x) as usize]
+    fn index_mut(&mut self, xy: XY) -> &mut Self::Output {
+        self.index_mut(&xy)
     }
 }
 

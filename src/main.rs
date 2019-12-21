@@ -25,7 +25,7 @@ use grid::{Grid, XY};
 const SCALE_IN_PX: usize = 50;
 const CELL_FILL_MARGIN_IN_PX: usize  = 10;
 const EDGE_THICKNESS_IN_PX: usize = 5;
-const EDGE_ENABLED_CHANCE: f32 = 0.8;
+const EDGE_ENABLED_CHANCE: f64 = 0.8;
 
 fn draw_box(
     image: &mut Image,
@@ -261,15 +261,15 @@ impl GridState {
         for (i, point) in path.iter().enumerate() {
             match i {
                 0 => {
-                    grid[point.point.clone()].kind = GridCellKind::Path(i);
+                    grid[&point.point].kind = GridCellKind::Path(i);
                     Self::erase_start_or_end_edge(&mut grid, &point.point);
                 },
                 _ if i == len - 1 => {
-                    grid[point.point.clone()].kind = GridCellKind::End;
+                    grid[&point.point].kind = GridCellKind::End;
                     Self::erase_start_or_end_edge(&mut grid, &point.point);
                 },
                 _ => {
-                    grid[point.point.clone()].kind = GridCellKind::Path(i);
+                    grid[&point.point].kind = GridCellKind::Path(i);
                 },
             };
         }
@@ -335,25 +335,33 @@ impl GridState {
             // Turn on edges randomly
             for cell in grid.iter_mut() {
                 if let EdgeState::Unset = cell.bottom_edge {
-                    if rand::thread_rng().gen_bool(0.8) {
+                    if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
                         cell.bottom_edge = EdgeState::ProvisionallyOn;
                     }
                 }
 
                 if let EdgeState::Unset = cell.left_edge {
-                    if rand::thread_rng().gen_bool(0.8) {
+                    if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
                         cell.left_edge = EdgeState::ProvisionallyOn;
                     }
                 }
             }
 
-            // Scan for enclosed cells and erase one edge to make them less invalid.
-            // TODO: scan for enclosed areas and open them.
-            for y in 0 .. grid.height() - 1 {
-                for x in 0 .. grid.width() - 1 {
-                    let point = XY(x, y);
-                    if Self::count_exits(&grid, &point) == 0 {
-                        Self::erase_random_non_border_edge(&mut grid, &point);
+            // Scan for enclosed areas and erase one edge to try to make them valid. This needs to
+            // be done in a loop because we might erase an edge that doesn't open the area up to the
+            // path.
+            let mut made_change = true;
+            while made_change {
+                made_change = false;
+                for y in 0 .. grid.height() - 1 {
+                    for x in 0 .. grid.width() - 1 {
+                        let point = XY(x, y);
+                        if let Some(enclosed_cells) = Self::find_enclosed_section(&grid, &point) {
+                            if enclosed_cells.len() == 1 {
+                                made_change = true;
+                                Self::erase_random_non_border_edge(&mut grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
+                            }
+                        }
                     }
                 }
             }
@@ -421,7 +429,7 @@ impl GridState {
         let mut edges = [None, None, None, None];
         let mut edge_count = 0;
 
-        let cell = &grid[point.clone()];
+        let cell = &grid[point];
         let adjacent_right_point = XY(point.0 + 1, point.1);
         let adjacent_above_point = XY(point.0, point.1 + 1);
 
@@ -440,22 +448,23 @@ impl GridState {
             edge_count += 1;
         }
 
-        if point.0 < grid.width() - 2 && grid[adjacent_right_point.clone()].has_left_edge() {
+        if point.0 < grid.width() - 2 && grid[&adjacent_right_point].has_left_edge() {
             edges[edge_count] = Some(CellEdge { point: adjacent_right_point.clone(), is_left_edge: true });
             edge_count += 1;
         }
 
-        if point.1 < grid.height() - 2 && grid[adjacent_above_point.clone()].has_bottom_edge() {
+        if point.1 < grid.height() - 2 && grid[&adjacent_above_point].has_bottom_edge() {
             edges[edge_count] = Some(CellEdge { point: adjacent_above_point.clone(), is_left_edge: false });
             edge_count += 1;
         }
 
+        println!("non-border edges for point {:?}: {}", point, edge_count);
         let edge_to_erase = &edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap();
         if edge_to_erase.is_left_edge {
-            grid[edge_to_erase.point.clone()].left_edge = EdgeState::Unset;
+            grid[&edge_to_erase.point].left_edge = EdgeState::Unset;
         }
         else {
-            grid[edge_to_erase.point.clone()].bottom_edge = EdgeState::Unset;
+            grid[&edge_to_erase.point].bottom_edge = EdgeState::Unset;
         }
     }
 
@@ -472,7 +481,7 @@ impl GridState {
     fn count_exits(grid: &CellGrid, point: &XY) -> usize {
         let mut exit_count = 0;
 
-        let cell = &grid[point.clone()];
+        let cell = &grid[point];
         if !cell.has_left_edge() {
             exit_count += 1;
         }
@@ -534,7 +543,7 @@ impl GridState {
 
         fn are_all_cells_reachable(grid: &CellGrid) -> bool {
             // Every cell must be reachable
-            let traversal = GridState::visit_all(&grid);
+            let traversal = GridState::visit_all(&grid, &XY(0, 0));
             traversal.iter().find(|&item| { !item }).is_none()
         }
 
@@ -544,7 +553,7 @@ impl GridState {
         //&& are_all_cells_reachable(grid)
     }
 
-    fn visit_all(grid: &CellGrid) -> Grid<bool> {
+    fn visit_all(grid: &CellGrid, start: &XY) -> Grid<bool> {
         fn visit(grid: &CellGrid, traversal: &mut Grid<bool>, x: usize, y: usize) {
             let traversal_cell = &mut traversal[XY(x, y)];
             if *traversal_cell {
@@ -572,9 +581,37 @@ impl GridState {
         }
 
         let mut traversal = Grid::new(grid.width() - 1, grid.height() - 1, &false);
-        visit(grid, &mut traversal, 0, 0);
+        visit(grid, &mut traversal, start.0, start.1);
 
         traversal
+    }
+
+    fn find_enclosed_section(grid: &CellGrid, point: &XY) -> Option<Vec<XY>> {
+        let traversal = Self::visit_all(grid, point);
+
+        // Filter to only cells that were touched by the traversal
+        traversal.iter().enumerate().filter(|(i, _)| {
+            traversal[traversal.index_to_xy(*i)]
+        }).fold(Some(Vec::<XY>::new()), |section_opt, (i, _)| {
+            if let Some(mut section) = section_opt {
+                let p = traversal.index_to_xy(i);
+                match grid[&p].kind {
+                    // Throw away the enclosed section if it ever touched the path, becuase that
+                    // means it had a way out of the maze.
+                    GridCellKind::Path(_) | GridCellKind::PathIntermediate | GridCellKind::End => None,
+
+                    // Otherwise, it was non-path cell that might have been self-enclosed, so add it
+                    // to the path.
+                    _ => {
+                        section.push(p);
+                        Some(section)
+                    },
+                }
+            }
+            else {
+                section_opt
+            }
+        })
     }
 
     fn update_grid(&mut self) {
@@ -585,7 +622,7 @@ impl GridState {
     fn extract_path(grid: &CellGrid) -> Vec<XY> {
         grid.iter().enumerate().filter_map(|(i, cell)| {
             match cell.kind {
-                GridCellKind::Path(_) | GridCellKind::End => Some(XY(i % grid.width(), i / grid.width())),
+                GridCellKind::Path(_) | GridCellKind::End => Some(grid.index_to_xy(i)),
                 _ => None
             }
         }).collect()
