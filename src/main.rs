@@ -1,6 +1,8 @@
 extern crate pixel_canvas;
 extern crate rand;
 
+use std::time::{Duration, Instant};
+
 use pixel_canvas::{
     Canvas,
     canvas::CanvasInfo,
@@ -16,7 +18,8 @@ use pixel_canvas::{
             VirtualKeyCode,
         },
     },
-    };
+};
+
 use rand::Rng;
 
 mod grid;
@@ -71,13 +74,26 @@ enum Command {
     Refresh,
 }
 
+enum GenStage {
+    Borders,
+    Rest,
+    Done,
+}
+
+struct GenState {
+    stage: GenStage,
+    entry_time: Instant,
+}
+
 type CellGrid = Grid<GridCell>;
 struct GridState {
     mouse_state: MouseState,
     grid: CellGrid,
     path: Vec<XY>,
     next_command: Option<Command>,
+    state: GenState,
     should_draw_path: bool,
+    path_point_count: usize,
 }
 
 impl GridCell {
@@ -104,31 +120,69 @@ impl GridCell {
     }
 }
 
-impl GridState {
-    fn new(width: usize, height: usize, path_point_count: usize) -> GridState {
-        let grid = Self::create_grid(width, height, path_point_count);
-        let path = Self::extract_path(&grid);
-
-        GridState {
-            grid: grid,
-            path: path,
-            mouse_state: MouseState::new(),
-            next_command: None,
-            should_draw_path: true,
+impl GenState {
+    fn new(stage: GenStage) -> GenState {
+        GenState {
+            stage,
+            entry_time: Instant::now(),
         }
     }
+}
 
-    fn create_grid(width: usize, height: usize, path_point_count: usize) -> CellGrid {
-        let mut grid = CellGrid::new(width, height, &GridCell::new());
+impl GridState {
+    fn new(width: usize, height: usize, path_point_count: usize) -> GridState {
+        let mut gs = GridState {
+            grid: CellGrid::new(width, height, &GridCell::new()),
+            path: Vec::new(),
+            mouse_state: MouseState::new(),
+            next_command: None,
+            state: GenState::new(GenStage::Borders),
+            should_draw_path: true,
+            path_point_count: path_point_count,
+        };
+
+        gs.start_generate_maze();
+
+        gs
+    }
+
+    fn start_generate_maze(&mut self) {
+        self.state = GenState::new(GenStage::Borders);
+    }
+
+    fn update(&mut self) {
+        let duration_in_current_state = self.state.entry_time.elapsed();
+
+        match self.state.stage {
+            GenStage::Borders => {
+                self.fill_borders();
+                if duration_in_current_state > Duration::from_millis(1000) {
+                    self.state.stage = GenStage::Rest;
+                }
+            },
+            GenStage::Rest => {
+                self.fill_rest_of_maze();
+                self.path = Self::extract_path(&self.grid);
+                self.state.stage = GenStage::Done;
+            },
+            _ => {},
+        };
+    }
+
+    fn fill_borders(&mut self) {
+        let width = self.grid.width();
+        let height = self.grid.height();
 
         // Turn on walls at the borders.
-        for (y, row) in grid.chunks_mut(width).enumerate() {
+        for (y, row) in self.grid.chunks_mut(width).enumerate() {
             for (x, cell) in row.iter_mut().enumerate() {
                 cell.bottom_edge = if (x != width - 1) && (y == 0 || y == height - 1) { EdgeState::On } else { EdgeState::Unset };
                 cell.left_edge = if (y != height - 1) && (x == 0 || x == width - 1) { EdgeState::On } else { EdgeState::Unset };
             }
         }
+    }
 
+    fn fill_rest_of_maze(&mut self) {
         #[derive(Clone, Debug)]
         enum Direction {
             Up,
@@ -142,6 +196,9 @@ impl GridState {
             point: XY,
             dir: Direction,
         }
+
+        let width = self.grid.width();
+        let height = self.grid.height();
 
         // Create the correct path through the maze.
         let mut path = Vec::<PathPoint>::new();
@@ -178,7 +235,7 @@ impl GridState {
         path.push(start.clone());
 
         let mut iter = 0;
-        while path.len() < path_point_count {
+        while path.len() < self.path_point_count {
             loop {
                 let start_left = start.point.0 == 0;
                 let start_bottom = start.point.1 == 0;
@@ -229,20 +286,20 @@ impl GridState {
 
                     let is_valid =
                         path.iter().find(|&item| { item.point == point }).is_none() &&
-                        ((path.len() != path_point_count - 1) || Self::is_valid_start_or_end(&grid, &point));
+                        ((path.len() != self.path_point_count - 1) || Self::is_valid_start_or_end(&self.grid, &point));
 
                     if is_valid {
                         path.push(PathPoint { point, dir });
                         println!("added. len now {}", path.len());
                         break;
                     }
-                    else if path.len() == path_point_count - 1 {
+                    else if path.len() == self.path_point_count - 1 {
                         should_reset_path = true;
                     }
                 }
 
                 if should_reset_path {
-                    println!("resetting iteration {}, path length {} out of {}. start point ({}, {}, {:?}). last point ({}, {}, {:?})", iter, path.len(), path_point_count, start.point.0, start.point.1, start.dir, last.point.0, last.point.1, last.dir);
+                    println!("resetting iteration {}, path length {} out of {}. start point ({}, {}, {:?}). last point ({}, {}, {:?})", iter, path.len(), self.path_point_count, start.point.0, start.point.1, start.dir, last.point.0, last.point.1, last.dir);
                     iter += 1;
                     path.clear();
                     path.push(start.clone());
@@ -261,15 +318,15 @@ impl GridState {
         for (i, point) in path.iter().enumerate() {
             match i {
                 0 => {
-                    grid[&point.point].kind = GridCellKind::Path(i);
-                    Self::erase_start_or_end_edge(&mut grid, &point.point);
+                    self.grid[&point.point].kind = GridCellKind::Path(i);
+                    Self::erase_start_or_end_edge(&mut self.grid, &point.point);
                 },
                 _ if i == len - 1 => {
-                    grid[&point.point].kind = GridCellKind::End;
-                    Self::erase_start_or_end_edge(&mut grid, &point.point);
+                    self.grid[&point.point].kind = GridCellKind::End;
+                    Self::erase_start_or_end_edge(&mut self.grid, &point.point);
                 },
                 _ => {
-                    grid[&point.point].kind = GridCellKind::Path(i);
+                    self.grid[&point.point].kind = GridCellKind::Path(i);
                 },
             };
         }
@@ -281,7 +338,7 @@ impl GridState {
                 while x != step.point.0 || y != step.point.1 {
                     match last.dir {
                         Direction::Up => {
-                            let cell = &mut grid[XY(x, y+1)];
+                            let cell = &mut self.grid[XY(x, y+1)];
                             cell.bottom_edge = EdgeState::Off;
                             if let GridCellKind::Empty = cell.kind {
                                 cell.kind = GridCellKind::PathIntermediate;
@@ -289,7 +346,7 @@ impl GridState {
                             y += 1;
                         },
                         Direction::Down => {
-                            let cell = &mut grid[XY(x, y)];
+                            let cell = &mut self.grid[XY(x, y)];
                             cell.bottom_edge = EdgeState::Off;
                             if let GridCellKind::Empty = cell.kind {
                                 cell.kind = GridCellKind::PathIntermediate;
@@ -297,7 +354,7 @@ impl GridState {
                             y -= 1;
                         },
                         Direction::Left => {
-                            let cell = &mut grid[XY(x, y)];
+                            let cell = &mut self.grid[XY(x, y)];
                             cell.left_edge = EdgeState::Off;
                             if let GridCellKind::Empty = cell.kind {
                                 cell.kind = GridCellKind::PathIntermediate;
@@ -305,7 +362,7 @@ impl GridState {
                             x -= 1;
                         },
                         Direction::Right => {
-                            let cell = &mut grid[XY(x+1, y)];
+                            let cell = &mut self.grid[XY(x+1, y)];
                             cell.left_edge = EdgeState::Off;
                             if let GridCellKind::Empty = cell.kind {
                                 cell.kind = GridCellKind::PathIntermediate;
@@ -322,7 +379,7 @@ impl GridState {
         iter = 1;
         loop {
             // Reset all provisionally-on edges to unset to try again.
-            for cell in grid.iter_mut() {
+            for cell in self.grid.iter_mut() {
                 if let EdgeState::ProvisionallyOn = cell.bottom_edge {
                     cell.bottom_edge = EdgeState::Unset;
                 }
@@ -333,7 +390,7 @@ impl GridState {
             }
 
             // Turn on edges randomly
-            for cell in grid.iter_mut() {
+            for cell in self.grid.iter_mut() {
                 if let EdgeState::Unset = cell.bottom_edge {
                     if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
                         cell.bottom_edge = EdgeState::ProvisionallyOn;
@@ -353,20 +410,20 @@ impl GridState {
             let mut made_change = true;
             while made_change {
                 made_change = false;
-                for y in 0 .. grid.height() - 1 {
-                    for x in 0 .. grid.width() - 1 {
+                for y in 0 .. self.grid.height() - 1 {
+                    for x in 0 .. self.grid.width() - 1 {
                         let point = XY(x, y);
-                        if let Some(enclosed_cells) = Self::find_enclosed_section(&grid, &point) {
+                        if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
                             if enclosed_cells.len() == 1 {
                                 made_change = true;
-                                Self::erase_random_non_border_edge(&mut grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
+                                Self::erase_random_non_border_edge(&mut self.grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
                             }
                         }
                     }
                 }
             }
 
-            if Self::has_valid_edges(&grid) {
+            if Self::has_valid_edges(&self.grid) {
                 break;
             }
 
@@ -376,7 +433,7 @@ impl GridState {
         println!("took {} iterations to get valid borders", iter);
 
         // Make all the provisional edges real
-        for cell in grid.iter_mut() {
+        for cell in self.grid.iter_mut() {
             if let EdgeState::ProvisionallyOn = cell.bottom_edge {
                 cell.bottom_edge = EdgeState::On;
             }
@@ -385,8 +442,6 @@ impl GridState {
                 cell.left_edge = EdgeState::On;
             }
         }
-
-        grid
     }
 
     fn erase_start_or_end_edge(grid: &mut CellGrid, XY(x, y): &XY) {
@@ -614,11 +669,6 @@ impl GridState {
         })
     }
 
-    fn update_grid(&mut self) {
-        self.grid = Self::create_grid(self.grid.width(), self.grid.height(), self.path.len());
-        self.path = Self::extract_path(&self.grid);
-    }
-
     fn extract_path(grid: &CellGrid) -> Vec<XY> {
         grid.iter().enumerate().filter_map(|(i, cell)| {
             match cell.kind {
@@ -631,7 +681,7 @@ impl GridState {
     fn process_command(&mut self) {
         match self.next_command {
             Some(Command::Exit) => std::process::exit(0),
-            Some(Command::Refresh) => self.update_grid(),
+            Some(Command::Refresh) => self.start_generate_maze(),
             _ => (),
         };
 
@@ -790,6 +840,7 @@ fn main() {
     // The canvas will render for you at up to 60fps.
     canvas.render(|grid_state, image| {
         grid_state.process_command();
+        grid_state.update();
         grid_state.draw(image);
     });
 }
