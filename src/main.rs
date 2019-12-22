@@ -147,7 +147,9 @@ impl GridState {
     }
 
     fn start_generate_maze(&mut self) {
+        self.grid = CellGrid::new(self.grid.width(), self.grid.height(), &GridCell::new());
         self.state = GenState::new(GenStage::Borders);
+        self.path.clear();
     }
 
     fn update(&mut self) {
