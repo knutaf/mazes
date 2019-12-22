@@ -76,6 +76,10 @@ enum Command {
 
 enum GenStage {
     Borders,
+    BordersDone,
+    Path,
+    PathWaiting,
+    PathDone,
     Rest,
     Done,
 }
@@ -94,6 +98,20 @@ struct GridState {
     state: GenState,
     should_draw_path: bool,
     path_point_count: usize,
+}
+
+#[derive(Clone, Debug)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+#[derive(Clone)]
+struct PathPoint {
+    point: XY,
+    dir: Direction,
 }
 
 impl GridCell {
@@ -158,14 +176,34 @@ impl GridState {
         match self.state.stage {
             GenStage::Borders => {
                 self.fill_borders();
+                self.state = GenState::new(GenStage::BordersDone);
+            },
+            GenStage::BordersDone => {
                 if duration_in_current_state > Duration::from_millis(1000) {
-                    self.state.stage = GenStage::Rest;
+                    self.state = GenState::new(GenStage::Path);
+                }
+            },
+            GenStage::Path => {
+                if !self.update_path() {
+                    self.state = GenState::new(GenStage::PathWaiting);
+                }
+                else {
+                    self.state = GenState::new(GenStage::PathDone);
+                }
+            },
+            GenStage::PathWaiting => {
+                if duration_in_current_state > Duration::from_millis(500) {
+                    self.state = GenState::new(GenStage::Path);
+                }
+            },
+            GenStage::PathDone => {
+                if duration_in_current_state > Duration::from_millis(1000) {
+                    self.state = GenState::new(GenStage::Rest);
                 }
             },
             GenStage::Rest => {
                 self.fill_rest_of_maze();
-                self.path = Self::extract_path(&self.grid);
-                self.state.stage = GenStage::Done;
+                self.state = GenState::new(GenStage::Done);
             },
             _ => {},
         };
@@ -184,25 +222,10 @@ impl GridState {
         }
     }
 
-    fn fill_rest_of_maze(&mut self) {
-        #[derive(Clone, Debug)]
-        enum Direction {
-            Up,
-            Down,
-            Left,
-            Right,
-        }
-
-        #[derive(Clone)]
-        struct PathPoint {
-            point: XY,
-            dir: Direction,
-        }
-
+    fn update_path(&mut self) -> bool {
         let width = self.grid.width();
         let height = self.grid.height();
 
-        // Create the correct path through the maze.
         let mut path = Vec::<PathPoint>::new();
 
         // For now choose the start point in a corner
@@ -378,7 +401,16 @@ impl GridState {
             Some(step)
         });
 
-        iter = 1;
+        self.path = Self::extract_path(&self.grid);
+
+        true
+    }
+
+    fn fill_rest_of_maze(&mut self) {
+        let width = self.grid.width();
+        let height = self.grid.height();
+
+        let mut iter = 1;
         loop {
             // Reset all provisionally-on edges to unset to try again.
             for cell in self.grid.iter_mut() {
