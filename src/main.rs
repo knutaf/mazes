@@ -74,14 +74,13 @@ enum Command {
     Refresh,
 }
 
+#[derive(Clone)]
 enum GenStage {
     Borders,
-    BordersDone,
     Path,
-    PathWaiting,
-    PathDone,
     Rest,
     Done,
+    TimedTransition(Duration, Box<GenStage>),
 }
 
 struct GenState {
@@ -164,46 +163,43 @@ impl GridState {
         gs
     }
 
+    fn set_stage(&mut self, stage: GenStage) {
+        self.state = GenState::new(stage);
+    }
+
+    fn set_stage_delayed(&mut self, stage: GenStage, millis: u64) {
+        self.state = GenState::new(GenStage::TimedTransition(Duration::from_millis(millis), Box::new(stage)));
+    }
+
     fn start_generate_maze(&mut self) {
         self.grid = CellGrid::new(self.grid.width(), self.grid.height(), &GridCell::new());
-        self.state = GenState::new(GenStage::Borders);
+        self.set_stage(GenStage::Borders);
         self.path.clear();
     }
 
     fn update(&mut self) {
-        let duration_in_current_state = self.state.entry_time.elapsed();
-
         match self.state.stage {
             GenStage::Borders => {
                 self.fill_borders();
-                self.state = GenState::new(GenStage::BordersDone);
-            },
-            GenStage::BordersDone => {
-                if duration_in_current_state > Duration::from_millis(1000) {
-                    self.state = GenState::new(GenStage::Path);
-                }
+                self.set_stage_delayed(GenStage::Path, 1000);
             },
             GenStage::Path => {
                 if !self.update_path() {
-                    self.state = GenState::new(GenStage::PathWaiting);
+                    self.set_stage_delayed(GenStage::Path, 500);
                 }
                 else {
-                    self.state = GenState::new(GenStage::PathDone);
-                }
-            },
-            GenStage::PathWaiting => {
-                if duration_in_current_state > Duration::from_millis(500) {
-                    self.state = GenState::new(GenStage::Path);
-                }
-            },
-            GenStage::PathDone => {
-                if duration_in_current_state > Duration::from_millis(1000) {
-                    self.state = GenState::new(GenStage::Rest);
+                    self.set_stage_delayed(GenStage::Rest, 1000);
                 }
             },
             GenStage::Rest => {
                 self.fill_rest_of_maze();
-                self.state = GenState::new(GenStage::Done);
+                self.set_stage(GenStage::Done);
+            },
+            GenStage::TimedTransition(ref duration, ref next_stage) => {
+                if self.state.entry_time.elapsed() >= *duration {
+                    let next = (**next_stage).clone();
+                    self.set_stage(next);
+                }
             },
             _ => {},
         };
