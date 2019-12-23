@@ -74,10 +74,12 @@ enum Command {
     Refresh,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum GenStage {
     Borders,
     Path,
+    EnableEdgesRandomly,
+    EraseInvalidEdges,
     Rest,
     Done,
     TimedTransition(Duration, Box<GenStage>),
@@ -164,6 +166,7 @@ impl GridState {
     }
 
     fn set_stage(&mut self, stage: GenStage) {
+        println!("Setting stage to {:?}", stage);
         self.state = GenState::new(stage);
     }
 
@@ -179,22 +182,11 @@ impl GridState {
 
     fn update(&mut self) {
         match self.state.stage {
-            GenStage::Borders => {
-                self.fill_borders();
-                self.set_stage_delayed(GenStage::Path, 1000);
-            },
-            GenStage::Path => {
-                if !self.update_path() {
-                    self.set_stage_delayed(GenStage::Path, 500);
-                }
-                else {
-                    self.set_stage_delayed(GenStage::Rest, 1000);
-                }
-            },
-            GenStage::Rest => {
-                self.fill_rest_of_maze();
-                self.set_stage(GenStage::Done);
-            },
+            GenStage::Borders => self.fill_borders(),
+            GenStage::Path => self.update_path(),
+            GenStage::EnableEdgesRandomly => self.enable_edges_randomly(),
+            GenStage::EraseInvalidEdges => self.erase_invalid_edges(),
+            GenStage::Rest => self.fill_rest_of_maze(),
             GenStage::TimedTransition(ref duration, ref next_stage) => {
                 if self.state.entry_time.elapsed() >= *duration {
                     let next = (**next_stage).clone();
@@ -216,9 +208,11 @@ impl GridState {
                 cell.left_edge = if (y != height - 1) && (x == 0 || x == width - 1) { EdgeState::On } else { EdgeState::Unset };
             }
         }
+
+        self.set_stage_delayed(GenStage::Path, 1000);
     }
 
-    fn update_path(&mut self) -> bool {
+    fn update_path(&mut self) {
         let width = self.grid.width();
         let height = self.grid.height();
 
@@ -399,73 +393,73 @@ impl GridState {
 
         self.path = Self::extract_path(&self.grid);
 
-        true
+        self.set_stage_delayed(GenStage::EnableEdgesRandomly, 1000);
     }
 
     fn enable_edges_randomly(&mut self) {
         let width = self.grid.width();
         let height = self.grid.height();
+
+        // Reset all provisionally-on edges to unset to try again.
+        for cell in self.grid.iter_mut() {
+            if let EdgeState::ProvisionallyOn = cell.bottom_edge {
+                cell.bottom_edge = EdgeState::Unset;
+            }
+
+            if let EdgeState::ProvisionallyOn = cell.left_edge {
+                cell.left_edge = EdgeState::Unset;
+            }
+        }
+
+        // Turn on edges randomly
+        for cell in self.grid.iter_mut() {
+            if let EdgeState::Unset = cell.bottom_edge {
+                if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
+                    cell.bottom_edge = EdgeState::ProvisionallyOn;
+                }
+            }
+
+            if let EdgeState::Unset = cell.left_edge {
+                if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
+                    cell.left_edge = EdgeState::ProvisionallyOn;
+                }
+            }
+        }
+
+        self.set_stage_delayed(GenStage::EraseInvalidEdges, 250);
+    }
+
+    fn erase_invalid_edges(&mut self) {
+        // Scan for enclosed areas and erase one edge to try to make them valid. This needs to
+        // be done in a loop because we might erase an edge that doesn't open the area up to the
+        // path.
+        let mut made_change = false;
+        for y in 0 .. self.grid.height() - 1 {
+            for x in 0 .. self.grid.width() - 1 {
+                let point = XY(x, y);
+                if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
+                    if enclosed_cells.len() == 1 {
+                        made_change = true;
+                        Self::erase_random_non_border_edge(&mut self.grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
+                    }
+                }
+            }
+        }
+
+        if made_change {
+            self.set_stage_delayed(GenStage::EraseInvalidEdges, 50);
+        }
+        else if Self::has_valid_edges(&self.grid) {
+            self.set_stage_delayed(GenStage::Rest, 500);
+        }
+        else {
+            self.set_stage_delayed(GenStage::EnableEdgesRandomly, 500);
+        }
     }
 
     fn fill_rest_of_maze(&mut self) {
         let width = self.grid.width();
         let height = self.grid.height();
-
-        let mut iter = 1;
-        loop {
-            // Reset all provisionally-on edges to unset to try again.
-            for cell in self.grid.iter_mut() {
-                if let EdgeState::ProvisionallyOn = cell.bottom_edge {
-                    cell.bottom_edge = EdgeState::Unset;
-                }
-
-                if let EdgeState::ProvisionallyOn = cell.left_edge {
-                    cell.left_edge = EdgeState::Unset;
-                }
-            }
-
-            // Turn on edges randomly
-            for cell in self.grid.iter_mut() {
-                if let EdgeState::Unset = cell.bottom_edge {
-                    if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
-                        cell.bottom_edge = EdgeState::ProvisionallyOn;
-                    }
-                }
-
-                if let EdgeState::Unset = cell.left_edge {
-                    if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
-                        cell.left_edge = EdgeState::ProvisionallyOn;
-                    }
-                }
-            }
-
-            // Scan for enclosed areas and erase one edge to try to make them valid. This needs to
-            // be done in a loop because we might erase an edge that doesn't open the area up to the
-            // path.
-            let mut made_change = true;
-            while made_change {
-                made_change = false;
-                for y in 0 .. self.grid.height() - 1 {
-                    for x in 0 .. self.grid.width() - 1 {
-                        let point = XY(x, y);
-                        if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
-                            if enclosed_cells.len() == 1 {
-                                made_change = true;
-                                Self::erase_random_non_border_edge(&mut self.grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if Self::has_valid_edges(&self.grid) {
-                break;
-            }
-
-            iter += 1;
-        }
-
-        println!("took {} iterations to get valid borders", iter);
 
         // Make all the provisional edges real
         for cell in self.grid.iter_mut() {
@@ -477,6 +471,8 @@ impl GridState {
                 cell.left_edge = EdgeState::On;
             }
         }
+
+        self.set_stage(GenStage::Done);
     }
 
     fn erase_start_or_end_edge(grid: &mut CellGrid, XY(x, y): &XY) {
