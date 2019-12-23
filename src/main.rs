@@ -402,6 +402,11 @@ impl GridState {
         true
     }
 
+    fn enable_edges_randomly(&mut self) {
+        let width = self.grid.width();
+        let height = self.grid.height();
+    }
+
     fn fill_rest_of_maze(&mut self) {
         let width = self.grid.width();
         let height = self.grid.height();
@@ -764,7 +769,8 @@ impl GridState {
         image: &mut Image,
         x: usize,
         y1: usize,
-        y2: usize
+        y2: usize,
+        color: &Color,
         )
     {
         draw_box(
@@ -773,7 +779,7 @@ impl GridState {
             y1 * SCALE_IN_PX,
             (x * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
             y2 * SCALE_IN_PX,
-            &Color { r: 0, g: 0, b: 0});
+            color);
     }
 
     fn draw_horizontal_edge(
@@ -781,7 +787,8 @@ impl GridState {
         image: &mut Image,
         x1: usize,
         x2: usize,
-        y: usize
+        y: usize,
+        color: &Color,
         )
     {
         draw_box(
@@ -790,7 +797,7 @@ impl GridState {
             y * SCALE_IN_PX,
             x2 * SCALE_IN_PX,
             (y * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
-            &Color { r: 0, g: 0, b: 0});
+            color);
     }
 
     fn draw_cell(
@@ -836,16 +843,20 @@ impl GridState {
             for (x, cell) in row.iter().enumerate() {
                 // Draw left edge
                 if y < grid.height() - 1 {
-                    if let EdgeState::On = cell.left_edge {
-                        self.draw_vertical_edge(image, x, y, y+1);
-                    }
+                    match cell.left_edge {
+                        EdgeState::On => self.draw_vertical_edge(image, x, y, y+1, &Color { r: 0, g: 0, b: 0 }),
+                        EdgeState::ProvisionallyOn => self.draw_vertical_edge(image, x, y, y+1, &Color { r: 200, g: 200, b: 200 }),
+                        _ => ()
+                    };
                 }
 
                 // Draw bottom edge
                 if x < grid.width() - 1 {
-                    if let EdgeState::On = cell.bottom_edge {
-                        self.draw_horizontal_edge(image, x, x+1, y);
-                    }
+                    match cell.bottom_edge {
+                        EdgeState::On => self.draw_horizontal_edge(image, x, x+1, y, &Color { r: 0, g: 0, b: 0 }),
+                        EdgeState::ProvisionallyOn => self.draw_horizontal_edge(image, x, x+1, y, &Color { r: 200, g: 200, b: 200 }),
+                        _ => ()
+                    };
                 }
 
                 self.draw_cell(image, x, y);
