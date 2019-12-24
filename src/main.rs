@@ -45,7 +45,7 @@ fn draw_box(
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum GridCellKind {
     Empty,
     Path(usize),
@@ -53,7 +53,7 @@ enum GridCellKind {
     End,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum EdgeState {
     Unset,
     Off,
@@ -61,7 +61,7 @@ enum EdgeState {
     On,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct GridCell {
     kind: GridCellKind,
     left_edge: EdgeState,
@@ -79,7 +79,7 @@ enum GenStage {
     Borders,
     Path,
     EnableEdgesRandomly,
-    EraseInvalidEdges,
+    EraseInvalidEdges(usize),
     Rest,
     Done,
     TimedTransition(Duration, Box<GenStage>),
@@ -185,7 +185,7 @@ impl GridState {
             GenStage::Borders => self.fill_borders(),
             GenStage::Path => self.update_path(),
             GenStage::EnableEdgesRandomly => self.enable_edges_randomly(),
-            GenStage::EraseInvalidEdges => self.erase_invalid_edges(),
+            GenStage::EraseInvalidEdges(starting_index) => self.erase_invalid_edges(starting_index),
             GenStage::Rest => self.fill_rest_of_maze(),
             GenStage::TimedTransition(ref duration, ref next_stage) => {
                 if self.state.entry_time.elapsed() >= *duration {
@@ -392,8 +392,12 @@ impl GridState {
         });
 
         self.path = Self::extract_path(&self.grid);
+        println!("path: {:?}", self.path);
 
         self.set_stage_delayed(GenStage::EnableEdgesRandomly, 1000);
+    }
+
+    fn update_path_2(&mut self) {
     }
 
     fn enable_edges_randomly(&mut self) {
@@ -426,34 +430,29 @@ impl GridState {
             }
         }
 
-        self.set_stage_delayed(GenStage::EraseInvalidEdges, 250);
+        self.set_stage_delayed(GenStage::EraseInvalidEdges(0), 250);
     }
 
-    fn erase_invalid_edges(&mut self) {
+    fn erase_invalid_edges(&mut self, starting_index: usize) {
         // Scan for enclosed areas and erase one edge to try to make them valid. This needs to
         // be done in a loop because we might erase an edge that doesn't open the area up to the
         // path.
-        let mut made_change = false;
-        for y in 0 .. self.grid.height() - 1 {
-            for x in 0 .. self.grid.width() - 1 {
-                let point = XY(x, y);
+        for i in starting_index .. self.grid.len() {
+            let point = self.grid.index_to_xy(i);
+            if point.0 < self.grid.width() - 1 && point.1 < self.grid.height() - 1 {
                 if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
-                    if enclosed_cells.len() == 1 {
-                        made_change = true;
-                        Self::erase_random_non_border_edge(&mut self.grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
-                    }
+                    Self::erase_random_non_border_edge(&mut self.grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
+                    self.set_stage_delayed(GenStage::EraseInvalidEdges(i + 1), 0);
+                    return;
                 }
             }
         }
 
-        if made_change {
-            self.set_stage_delayed(GenStage::EraseInvalidEdges, 50);
-        }
-        else if Self::has_valid_edges(&self.grid) {
+        if Self::has_valid_edges(&self.grid) {
             self.set_stage_delayed(GenStage::Rest, 500);
         }
         else {
-            self.set_stage_delayed(GenStage::EnableEdgesRandomly, 500);
+            self.set_stage_delayed(GenStage::EnableEdgesRandomly, 250);
         }
     }
 
@@ -544,13 +543,14 @@ impl GridState {
             edge_count += 1;
         }
 
-        println!("non-border edges for point {:?}: {}", point, edge_count);
-        let edge_to_erase = &edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap();
-        if edge_to_erase.is_left_edge {
-            grid[&edge_to_erase.point].left_edge = EdgeState::Unset;
-        }
-        else {
-            grid[&edge_to_erase.point].bottom_edge = EdgeState::Unset;
+        if edge_count > 0 {
+            let edge_to_erase = &edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap();
+            if edge_to_erase.is_left_edge {
+                grid[&edge_to_erase.point].left_edge = EdgeState::Unset;
+            }
+            else {
+                grid[&edge_to_erase.point].bottom_edge = EdgeState::Unset;
+            }
         }
     }
 
@@ -682,7 +682,7 @@ impl GridState {
             if let Some(mut section) = section_opt {
                 let p = traversal.index_to_xy(i);
                 match grid[&p].kind {
-                    // Throw away the enclosed section if it ever touched the path, becuase that
+                    // Throw away the enclosed section if it ever touched the path, because that
                     // means it had a way out of the maze.
                     GridCellKind::Path(_) | GridCellKind::PathIntermediate | GridCellKind::End => None,
 
@@ -835,28 +835,29 @@ impl GridState {
         image.fill(Color { r: 255, g: 255, b: 255 });
 
         let grid = &self.grid;
-        for (y, row) in grid.chunks(grid.width()).enumerate() {
-            for (x, cell) in row.iter().enumerate() {
-                // Draw left edge
-                if y < grid.height() - 1 {
-                    match cell.left_edge {
-                        EdgeState::On => self.draw_vertical_edge(image, x, y, y+1, &Color { r: 0, g: 0, b: 0 }),
-                        EdgeState::ProvisionallyOn => self.draw_vertical_edge(image, x, y, y+1, &Color { r: 200, g: 200, b: 200 }),
-                        _ => ()
-                    };
-                }
+        for i in 0 .. grid.len() {
+            let XY(x, y) = grid.index_to_xy(i);
+            let cell = &grid[XY(x, y)];
 
-                // Draw bottom edge
-                if x < grid.width() - 1 {
-                    match cell.bottom_edge {
-                        EdgeState::On => self.draw_horizontal_edge(image, x, x+1, y, &Color { r: 0, g: 0, b: 0 }),
-                        EdgeState::ProvisionallyOn => self.draw_horizontal_edge(image, x, x+1, y, &Color { r: 200, g: 200, b: 200 }),
-                        _ => ()
-                    };
-                }
-
-                self.draw_cell(image, x, y);
+            // Draw left edge
+            if y < grid.height() - 1 {
+                match cell.left_edge {
+                    EdgeState::On => self.draw_vertical_edge(image, x, y, y+1, &Color { r: 0, g: 0, b: 0 }),
+                    EdgeState::ProvisionallyOn => self.draw_vertical_edge(image, x, y, y+1, &Color { r: 200, g: 200, b: 200 }),
+                    _ => ()
+                };
             }
+
+            // Draw bottom edge
+            if x < grid.width() - 1 {
+                match cell.bottom_edge {
+                    EdgeState::On => self.draw_horizontal_edge(image, x, x+1, y, &Color { r: 0, g: 0, b: 0 }),
+                    EdgeState::ProvisionallyOn => self.draw_horizontal_edge(image, x, x+1, y, &Color { r: 200, g: 200, b: 200 }),
+                    _ => ()
+                };
+            }
+
+            self.draw_cell(image, x, y);
         }
     }
 }
