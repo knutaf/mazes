@@ -115,6 +115,12 @@ struct PathPoint {
     dir: Direction,
 }
 
+#[derive(Clone)]
+struct CellEdge {
+    point: XY,
+    is_left_edge: bool,
+}
+
 impl GridCell {
     fn new() -> GridCell {
         GridCell {
@@ -510,18 +516,22 @@ impl GridState {
         }
     }
 
-    fn erase_random_non_border_edge(grid: &mut CellGrid, point: &XY) {
+    fn erase_cell_edge(grid: &mut CellGrid, edge_to_erase: &CellEdge) {
+        if edge_to_erase.is_left_edge {
+            grid[&edge_to_erase.point].left_edge = EdgeState::Unset;
+        }
+        else {
+            grid[&edge_to_erase.point].bottom_edge = EdgeState::Unset;
+        }
+    }
+
+    fn pick_random_non_border_edge(grid: &CellGrid, point: &XY) -> Option<CellEdge> {
         let mut edges = [None, None, None, None];
         let mut edge_count = 0;
 
         let cell = &grid[point];
         let adjacent_right_point = XY(point.0 + 1, point.1);
         let adjacent_above_point = XY(point.0, point.1 + 1);
-
-        struct CellEdge {
-            point: XY,
-            is_left_edge: bool,
-        }
 
         if point.0 > 0 && cell.has_left_edge() {
             edges[edge_count] = Some(CellEdge { point: point.clone(), is_left_edge: true });
@@ -544,13 +554,16 @@ impl GridState {
         }
 
         if edge_count > 0 {
-            let edge_to_erase = &edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap();
-            if edge_to_erase.is_left_edge {
-                grid[&edge_to_erase.point].left_edge = EdgeState::Unset;
-            }
-            else {
-                grid[&edge_to_erase.point].bottom_edge = EdgeState::Unset;
-            }
+            Some(edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap().clone())
+        }
+        else {
+            None
+        }
+    }
+
+    fn erase_random_non_border_edge(grid: &mut CellGrid, point: &XY) {
+        if let Some(edge_to_erase) = Self::pick_random_non_border_edge(grid, point) {
+            Self::erase_cell_edge(grid, &edge_to_erase);
         }
     }
 
