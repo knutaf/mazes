@@ -403,9 +403,6 @@ impl GridState {
         self.set_stage_delayed(GenStage::EnableEdgesRandomly, 1000);
     }
 
-    fn update_path_2(&mut self) {
-    }
-
     fn enable_edges_randomly(&mut self) {
         let width = self.grid.width();
         let height = self.grid.height();
@@ -436,7 +433,9 @@ impl GridState {
             }
         }
 
-        self.set_stage_delayed(GenStage::EraseInvalidEdges(0), 250);
+        if Self::has_inner_grid_walls(&self.grid) {
+            self.set_stage_delayed(GenStage::EraseInvalidEdges(0), 250);
+        }
     }
 
     fn erase_invalid_edges(&mut self, starting_index: usize) {
@@ -600,32 +599,32 @@ impl GridState {
         exit_count
     }
 
-    fn has_valid_edges(grid: &CellGrid) -> bool {
-        fn has_inner_grid_walls(grid: &CellGrid) -> bool {
-            // For every 2x2 sub-grid, there must be at least one inner wall
-            for y in 0 .. grid.height() - 1 {
-                for x in 0 .. grid.width() - 1 {
-                    if grid[XY(x+1, y)].has_left_edge() {
-                        continue;
-                    }
-
-                    if grid[XY(x, y+1)].has_bottom_edge() {
-                        continue;
-                    }
-
-                    let cell = &grid[XY(x+1, y+1)];
-                    if cell.has_left_edge() || cell.has_bottom_edge() {
-                        continue;
-                    }
-
-                    //println!("no inner edges");
-                    return false;
+    fn has_inner_grid_walls(grid: &CellGrid) -> bool {
+        // For every 2x2 sub-grid, there must be at least one inner wall
+        for y in 0 .. grid.height() - 1 {
+            for x in 0 .. grid.width() - 1 {
+                if grid[XY(x+1, y)].has_left_edge() {
+                    continue;
                 }
-            }
 
-            true
+                if grid[XY(x, y+1)].has_bottom_edge() {
+                    continue;
+                }
+
+                let cell = &grid[XY(x+1, y+1)];
+                if cell.has_left_edge() || cell.has_bottom_edge() {
+                    continue;
+                }
+
+                //println!("no inner edges");
+                return false;
+            }
         }
 
+        true
+    }
+
+    fn has_valid_edges(grid: &CellGrid) -> bool {
         fn are_all_cells_open(grid: &CellGrid) -> bool {
             // Every cell must have at least one exit
             for y in 0 .. grid.height() - 1 {
@@ -647,7 +646,7 @@ impl GridState {
         }
 
         true
-        && has_inner_grid_walls(grid)
+        && Self::has_inner_grid_walls(grid)
         //&& are_all_cells_open(grid)
         //&& are_all_cells_reachable(grid)
     }
