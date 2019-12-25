@@ -446,19 +446,24 @@ impl GridState {
             let point = self.grid.index_to_xy(i);
             if point.0 < self.grid.width() - 1 && point.1 < self.grid.height() - 1 {
                 if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
-                    Self::erase_random_non_border_edge(&mut self.grid, &enclosed_cells[rand::thread_rng().gen_range(0, enclosed_cells.len())]);
-                    self.set_stage_delayed(GenStage::EraseInvalidEdges(i + 1), 0);
-                    return;
+                    if let Some(edge_to_erase) = Self::pick_random_non_border_edge(&self.grid, &point) {
+                        let cell_orig = self.grid[edge_to_erase.point.clone()].clone();
+
+                        Self::erase_cell_edge(&mut self.grid, &edge_to_erase);
+
+                        if !Self::has_inner_grid_walls(&self.grid) {
+                            self.grid[edge_to_erase.point.clone()] = cell_orig;
+                        }
+                        else {
+                            self.set_stage_delayed(GenStage::EraseInvalidEdges(i + 1), 0);
+                            return;
+                        }
+                    }
                 }
             }
         }
 
-        if Self::has_valid_edges(&self.grid) {
-            self.set_stage_delayed(GenStage::Rest, 500);
-        }
-        else {
-            self.set_stage_delayed(GenStage::EnableEdgesRandomly, 250);
-        }
+        self.set_stage_delayed(GenStage::Rest, 500);
     }
 
     fn fill_rest_of_maze(&mut self) {
