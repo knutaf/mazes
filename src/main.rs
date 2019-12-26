@@ -27,9 +27,12 @@ use crate::rand::SeedableRng;
 mod grid;
 use grid::{Grid, XY};
 
-const SCALE_IN_PX: usize = 50;
-const CELL_FILL_MARGIN_IN_PX: usize  = 10;
-const EDGE_THICKNESS_IN_PX: usize = 5;
+const GRID_WIDTH: usize = 20;
+const GRID_HEIGHT: usize = 20;
+const PATH_POINT_COUNT: usize = 12;
+const SCALE_IN_PX: usize = 25;
+const CELL_FILL_MARGIN_IN_PX: usize  = 5;
+const EDGE_THICKNESS_IN_PX: usize = 3;
 const EDGE_ENABLED_CHANCE: f64 = 0.8;
 
 fn draw_box(
@@ -892,19 +895,15 @@ fn main() {
 
     println!("Using seed {}", seed);
 
-    let mut grid_state = GridState::new(seed, 10, 10, 6);
+    let mut grid_state = GridState::new(seed, GRID_WIDTH, GRID_HEIGHT, PATH_POINT_COUNT);
     let grid = &mut grid_state.grid;
 
-    // Configure the window that you want to draw in. You can add an event
-    // handler to build interactive art. Input handlers for common use are
-    // provided.
-    let canvas = Canvas::new(grid.width() * SCALE_IN_PX, grid.height() * SCALE_IN_PX)
+    let canvas = Canvas::new(600, 600)
         .title("Mazes")
         .state(grid_state)
         .input(GridState::handle_input)
         ;
 
-    // The canvas will render for you at up to 60fps.
     canvas.render(|grid_state, image| {
         grid_state.process_command();
         grid_state.update();
