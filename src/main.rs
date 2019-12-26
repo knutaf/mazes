@@ -2,6 +2,7 @@ extern crate pixel_canvas;
 extern crate rand;
 
 use std::time::{Duration, Instant};
+use std::env;
 
 use pixel_canvas::{
     Canvas,
@@ -21,6 +22,7 @@ use pixel_canvas::{
 };
 
 use rand::Rng;
+use crate::rand::SeedableRng;
 
 mod grid;
 use grid::{Grid, XY};
@@ -92,6 +94,7 @@ struct GenState {
 
 type CellGrid = Grid<GridCell>;
 struct GridState {
+    rng: rand::rngs::StdRng,
     mouse_state: MouseState,
     grid: CellGrid,
     path: Vec<XY>,
@@ -155,8 +158,9 @@ impl GenState {
 }
 
 impl GridState {
-    fn new(width: usize, height: usize, path_point_count: usize) -> GridState {
+    fn new(seed: u64, width: usize, height: usize, path_point_count: usize) -> GridState {
         let mut gs = GridState {
+            rng: rand::rngs::StdRng::seed_from_u64(seed),
             grid: CellGrid::new(width, height, &GridCell::new()),
             path: Vec::new(),
             mouse_state: MouseState::new(),
@@ -226,9 +230,9 @@ impl GridState {
 
         // For now choose the start point in a corner
         let start = {
-            let start_bottom = rand::thread_rng().gen_bool(0.5);
-            let start_left = rand::thread_rng().gen_bool(0.5);
-            let start_points_vertical = rand::thread_rng().gen_bool(0.5);
+            let start_bottom = self.rng.gen_bool(0.5);
+            let start_left = self.rng.gen_bool(0.5);
+            let start_points_vertical = self.rng.gen_bool(0.5);
 
             PathPoint {
                 point: XY(if start_left { 0 } else { width - 2 }, if start_bottom { 0 } else { height - 2 }),
@@ -297,10 +301,10 @@ impl GridState {
                 if !should_reset_path {
                     let point =
                         match last.dir {
-                            Direction::Up => XY(last.point.0, rand::thread_rng().gen_range(last.point.1, height - 1)),
-                            Direction::Down => XY(last.point.0, rand::thread_rng().gen_range(0, last.point.1)),
-                            Direction::Left => XY(rand::thread_rng().gen_range(0, last.point.0), last.point.1),
-                            Direction::Right => XY(rand::thread_rng().gen_range(last.point.0, width - 1), last.point.1),
+                            Direction::Up => XY(last.point.0, self.rng.gen_range(last.point.1, height - 1)),
+                            Direction::Down => XY(last.point.0, self.rng.gen_range(0, last.point.1)),
+                            Direction::Left => XY(self.rng.gen_range(0, last.point.0), last.point.1),
+                            Direction::Right => XY(self.rng.gen_range(last.point.0, width - 1), last.point.1),
                         };
 
                     println!("considering point ({}, {}, {:?})", point.0, point.1, dir);
@@ -340,11 +344,11 @@ impl GridState {
             match i {
                 0 => {
                     self.grid[&point.point].kind = GridCellKind::Path(i);
-                    Self::erase_start_or_end_edge(&mut self.grid, &point.point);
+                    Self::erase_start_or_end_edge(&mut self.rng, &mut self.grid, &point.point);
                 },
                 _ if i == len - 1 => {
                     self.grid[&point.point].kind = GridCellKind::End;
-                    Self::erase_start_or_end_edge(&mut self.grid, &point.point);
+                    Self::erase_start_or_end_edge(&mut self.rng, &mut self.grid, &point.point);
                 },
                 _ => {
                     self.grid[&point.point].kind = GridCellKind::Path(i);
@@ -421,13 +425,13 @@ impl GridState {
         // Turn on edges randomly
         for cell in self.grid.iter_mut() {
             if let EdgeState::Unset = cell.bottom_edge {
-                if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
+                if self.rng.gen_bool(EDGE_ENABLED_CHANCE) {
                     cell.bottom_edge = EdgeState::ProvisionallyOn;
                 }
             }
 
             if let EdgeState::Unset = cell.left_edge {
-                if rand::thread_rng().gen_bool(EDGE_ENABLED_CHANCE) {
+                if self.rng.gen_bool(EDGE_ENABLED_CHANCE) {
                     cell.left_edge = EdgeState::ProvisionallyOn;
                 }
             }
@@ -446,7 +450,7 @@ impl GridState {
             let point = self.grid.index_to_xy(i);
             if point.0 < self.grid.width() - 1 && point.1 < self.grid.height() - 1 {
                 if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
-                    if let Some(edge_to_erase) = Self::pick_random_non_border_edge(&self.grid, &point) {
+                    if let Some(edge_to_erase) = Self::pick_random_non_border_edge(&mut self.rng, &self.grid, &point) {
                         let cell_orig = self.grid[edge_to_erase.point.clone()].clone();
 
                         Self::erase_cell_edge(&mut self.grid, &edge_to_erase);
@@ -484,7 +488,7 @@ impl GridState {
         self.set_stage(GenStage::Done);
     }
 
-    fn erase_start_or_end_edge(grid: &mut CellGrid, XY(x, y): &XY) {
+    fn erase_start_or_end_edge(rng: &mut rand::rngs::StdRng, grid: &mut CellGrid, XY(x, y): &XY) {
         let x = *x;
         let y = *y;
 
@@ -494,9 +498,9 @@ impl GridState {
         // Decide whether to erase a vertical edge or horizontal edge. The chosen edge can only be
         // erased if the cell has such an edge available to erase, so keep looping until the intent
         // and available edge lines up.
-        let mut erase_vertical_edge = rand::thread_rng().gen_bool(0.5);
+        let mut erase_vertical_edge = rng.gen_bool(0.5);
         while erase_vertical_edge != has_vertical_edge && !erase_vertical_edge != has_horizontal_edge {
-            erase_vertical_edge = rand::thread_rng().gen_bool(0.5);
+            erase_vertical_edge = rng.gen_bool(0.5);
         }
 
         // Erasing a vertical edge on the right border means going to the next cell over (just
@@ -529,7 +533,7 @@ impl GridState {
         }
     }
 
-    fn pick_random_non_border_edge(grid: &CellGrid, point: &XY) -> Option<CellEdge> {
+    fn pick_random_non_border_edge(rng: &mut rand::rngs::StdRng, grid: &CellGrid, point: &XY) -> Option<CellEdge> {
         let mut edges = [None, None, None, None];
         let mut edge_count = 0;
 
@@ -558,16 +562,10 @@ impl GridState {
         }
 
         if edge_count > 0 {
-            Some(edges[rand::thread_rng().gen_range(0, edge_count)].as_ref().unwrap().clone())
+            Some(edges[rng.gen_range(0, edge_count)].as_ref().unwrap().clone())
         }
         else {
             None
-        }
-    }
-
-    fn erase_random_non_border_edge(grid: &mut CellGrid, point: &XY) {
-        if let Some(edge_to_erase) = Self::pick_random_non_border_edge(grid, point) {
-            Self::erase_cell_edge(grid, &edge_to_erase);
         }
     }
 
@@ -880,7 +878,21 @@ impl GridState {
 }
 
 fn main() {
-    let mut grid_state = GridState::new(10, 10, 6);
+    let args: Vec<String> = env::args().collect();
+
+    let mut seed = rand::thread_rng().gen_range(0, u64::max_value());
+
+    for i in 0 .. args.len() {
+        if args[i] == "-r" {
+            if i < args.len() - 1 {
+                seed = args[i + 1].parse::<u64>().unwrap();
+            }
+        }
+    }
+
+    println!("Using seed {}", seed);
+
+    let mut grid_state = GridState::new(seed, 10, 10, 6);
     let grid = &mut grid_state.grid;
 
     // Configure the window that you want to draw in. You can add an event
