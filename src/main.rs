@@ -33,7 +33,8 @@ const PATH_POINT_COUNT: usize = 12;
 const SCALE_IN_PX: usize = 25;
 const CELL_FILL_MARGIN_IN_PX: usize  = 5;
 const EDGE_THICKNESS_IN_PX: usize = 3;
-const EDGE_ENABLED_CHANCE: f64 = 0.8;
+const EDGE_ENABLED_CHANCE: f64 = 1.0;
+const DRAW_OFFSET_IN_PX: usize = 20;
 
 fn draw_box(
     image: &mut Image,
@@ -45,7 +46,7 @@ fn draw_box(
     ) {
     for draw_x in x1 .. x2 {
         for draw_y in y1 .. y2 {
-            image[pixel_canvas::XY(draw_x, draw_y)] = *color;
+            image[pixel_canvas::XY(draw_x + DRAW_OFFSET_IN_PX, draw_y + DRAW_OFFSET_IN_PX)] = *color;
         }
     }
 }
@@ -445,28 +446,41 @@ impl GridState {
         }
     }
 
+    fn erase_edge_in_enclosure(&mut self, point: &XY) -> bool {
+        if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
+            let mut tries = 4;
+            while let Some(edge_to_erase) = Self::pick_random_non_border_edge(&mut self.rng, &self.grid, &point) {
+                if tries == 0 {
+                    return true;
+                }
+
+                let cell_orig = self.grid[edge_to_erase.point.clone()].clone();
+
+                Self::erase_cell_edge(&mut self.grid, &edge_to_erase);
+
+                if !Self::has_inner_grid_walls(&self.grid) {
+                    tries -= 1;
+                    self.grid[edge_to_erase.point.clone()] = cell_orig;
+                }
+                else {
+                    return true;
+                }
+            }
+        }
+
+        // Nothing more to do with this point: no enclosure found.
+        false
+    }
+
     fn erase_invalid_edges(&mut self, starting_index: usize) {
-        // Scan for enclosed areas and erase one edge to try to make them valid. This needs to
-        // be done in a loop because we might erase an edge that doesn't open the area up to the
-        // path.
         for i in starting_index .. self.grid.len() {
             let point = self.grid.index_to_xy(i);
             if point.0 < self.grid.width() - 1 && point.1 < self.grid.height() - 1 {
-                if let Some(enclosed_cells) = Self::find_enclosed_section(&self.grid, &point) {
-                    if let Some(edge_to_erase) = Self::pick_random_non_border_edge(&mut self.rng, &self.grid, &point) {
-                        let cell_orig = self.grid[edge_to_erase.point.clone()].clone();
-
-                        Self::erase_cell_edge(&mut self.grid, &edge_to_erase);
-
-                        if !Self::has_inner_grid_walls(&self.grid) {
-                            self.grid[edge_to_erase.point.clone()] = cell_orig;
-                        }
-                        else {
-                            self.set_stage_delayed(GenStage::EraseInvalidEdges(i + 1), 0);
-                            return;
-                        }
-                    }
+                if !self.erase_edge_in_enclosure(&point) {
+                    self.set_stage(GenStage::EraseInvalidEdges(i + 1));
                 }
+
+                return;
             }
         }
 
@@ -792,7 +806,7 @@ impl GridState {
             x * SCALE_IN_PX,
             y1 * SCALE_IN_PX,
             (x * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
-            y2 * SCALE_IN_PX,
+            (y2 * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
             color);
     }
 
@@ -809,7 +823,7 @@ impl GridState {
             image,
             x1 * SCALE_IN_PX,
             y * SCALE_IN_PX,
-            x2 * SCALE_IN_PX,
+            (x2 * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
             (y * SCALE_IN_PX) + EDGE_THICKNESS_IN_PX,
             color);
     }
