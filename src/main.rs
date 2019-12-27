@@ -33,7 +33,7 @@ const PATH_POINT_COUNT: usize = 12;
 const SCALE_IN_PX: usize = 25;
 const CELL_FILL_MARGIN_IN_PX: usize  = 5;
 const EDGE_THICKNESS_IN_PX: usize = 3;
-const EDGE_ENABLED_CHANCE: f64 = 1.0;
+const EDGE_ENABLED_CHANCE: f64 = 0.7;
 const DRAW_OFFSET_IN_PX: usize = 20;
 
 fn draw_box(
@@ -451,7 +451,7 @@ impl GridState {
             let mut tries = 4;
             while let Some(edge_to_erase) = Self::pick_random_non_border_edge(&mut self.rng, &self.grid, &point) {
                 if tries == 0 {
-                    return true;
+                    return false;
                 }
 
                 let cell_orig = self.grid[edge_to_erase.point.clone()].clone();
@@ -470,6 +470,11 @@ impl GridState {
 
         // Nothing more to do with this point: no enclosure found.
         false
+    }
+
+    fn erase_random_invalid_edge(&mut self, iteration: usize) {
+        let point = self.grid.index_to_xy(self.rng.gen_range(0, self.grid.len()));
+        //self.set_stage(GenStage::EraseRandomInvalidEdges(iteration + 1));
     }
 
     fn erase_invalid_edges(&mut self, starting_index: usize) {
