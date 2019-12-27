@@ -34,6 +34,7 @@ const SCALE_IN_PX: usize = 25;
 const CELL_FILL_MARGIN_IN_PX: usize  = 5;
 const EDGE_THICKNESS_IN_PX: usize = 3;
 const EDGE_ENABLED_CHANCE: f64 = 0.7;
+const RANDOM_INVALID_EDGE_ERASE_FACTOR: usize = 4;
 const DRAW_OFFSET_IN_PX: usize = 20;
 
 fn draw_box(
@@ -85,6 +86,7 @@ enum GenStage {
     Borders,
     Path,
     EnableEdgesRandomly,
+    EraseRandomInvalidEdges(usize),
     EraseInvalidEdges(usize),
     Rest,
     Done,
@@ -199,7 +201,8 @@ impl GridState {
             GenStage::Borders => self.fill_borders(),
             GenStage::Path => self.update_path(),
             GenStage::EnableEdgesRandomly => self.enable_edges_randomly(),
-            GenStage::EraseInvalidEdges(starting_index) => self.erase_invalid_edges(starting_index),
+            GenStage::EraseRandomInvalidEdges(iteration) => self.erase_random_invalid_edge(iteration),
+            GenStage::EraseInvalidEdges(starting_index) => self.erase_invalid_edge(starting_index),
             GenStage::Rest => self.fill_rest_of_maze(),
             GenStage::TimedTransition(ref duration, ref next_stage) => {
                 if self.state.entry_time.elapsed() >= *duration {
@@ -442,7 +445,7 @@ impl GridState {
         }
 
         if Self::has_inner_grid_walls(&self.grid) {
-            self.set_stage_delayed(GenStage::EraseInvalidEdges(0), 250);
+            self.set_stage_delayed(GenStage::EraseRandomInvalidEdges(0), 250);
         }
     }
 
@@ -473,11 +476,22 @@ impl GridState {
     }
 
     fn erase_random_invalid_edge(&mut self, iteration: usize) {
-        let point = self.grid.index_to_xy(self.rng.gen_range(0, self.grid.len()));
-        //self.set_stage(GenStage::EraseRandomInvalidEdges(iteration + 1));
+        if iteration < self.grid.len() / RANDOM_INVALID_EDGE_ERASE_FACTOR {
+            loop {
+                let point = self.grid.index_to_xy(self.rng.gen_range(0, self.grid.len()));
+                if point.0 < self.grid.width() - 1 && point.1 < self.grid.height() - 1 {
+                    self.erase_edge_in_enclosure(&point);
+                    self.set_stage(GenStage::EraseRandomInvalidEdges(iteration + 1));
+                    break;
+                }
+            }
+        }
+        else {
+            self.set_stage(GenStage::EraseInvalidEdges(0));
+        }
     }
 
-    fn erase_invalid_edges(&mut self, starting_index: usize) {
+    fn erase_invalid_edge(&mut self, starting_index: usize) {
         for i in starting_index .. self.grid.len() {
             let point = self.grid.index_to_xy(i);
             if point.0 < self.grid.width() - 1 && point.1 < self.grid.height() - 1 {
