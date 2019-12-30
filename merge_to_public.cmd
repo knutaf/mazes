@@ -12,4 +12,5 @@ if %errorlevel% NEQ 0 (
 )
 cmd /c gitm master
 git rm -f %repo%\merge_to_public.cmd
+git rm -f %repo%\todo.txt
 REM add more git rm -f lines here to remove other private files
